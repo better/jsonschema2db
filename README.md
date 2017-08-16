@@ -19,12 +19,42 @@ Let's say you have this schema: [test_schema.json](https://github.com/better/jso
 jsonschema2db creates the following tables automatically:
 
 ```
-create table "schm"."real_estate_owned" (id serial primary key, "loan_file_id" int not null, "prefix" text not null, "address_id" integer, "rental_income" float, "root_id" integer, unique ("loan_file_id", "prefix"))
-create table "schm"."root" (id serial primary key, "loan_file_id" int not null, "prefix" text not null, "loan__amount" float, "subject_property__acreage" float, "subject_property__address__latitude" float, "subject_property__address__longitude" float, "subject_property__address_id" integer, unique ("loan_file_id", "prefix"))
-create table "schm"."basic_address" (id serial primary key, "loan_file_id" int not null, "prefix" text not null, "city" text, "root_id" integer, "state" text, "street" text, "zip_code" text, unique ("loan_file_id", "prefix"))
+create table "schm"."root" (
+       id serial primary key,
+       "loan_file_id" int not null,
+       "prefix" text not null,
+       "loan__amount" float,
+       "subject_property__acreage" float,
+       "subject_property__address__latitude" float,
+       "subject_property__address__longitude" float,
+       "subject_property__address_id" integer,
+       unique ("loan_file_id", "prefix")
+)
+
+create table "schm"."basic_address" (
+       id serial primary key,
+       "loan_file_id" int not null,
+       "prefix" text not null,
+       "city" text,
+       "root_id" integer,
+       "state" text,
+       "street" text,
+       "zip_code" text,
+       unique ("loan_file_id", "prefix")
+)
+
+create table "schm"."real_estate_owned" (
+       id serial primary key,
+       "loan_file_id" int not null,
+       "prefix" text not null,
+       "address_id" integer,
+       "rental_income" float,
+       "root_id" integer,
+       unique ("loan_file_id", "prefix")
+)
 ```
 
-As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types.
+As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types. jsonschema2db also converts camel case into snake case since that's the Postgres convention.
 
 jsonschema2db also handles inserts into these tables by transforming them into a flattened form. On top of that, a number of foreign keys will be created and links between the tables.
 
