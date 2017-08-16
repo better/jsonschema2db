@@ -65,6 +65,66 @@ The rule for when to create a separate table is that either:
 1. It's a shared definition that is an object (with links from the parent to the child)
 2. Any object with `patternProperties` will have its children in a separate table (with links back to the parent, if the link is unique)
 
+Inserting data
+---
+
+Let's say we have the following object with key `1000000000`:
+
+```
+{1000000000: {'Loan': {'Amount': 500000},
+              'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn',
+                                                    'ZipCode': '65432'},
+                                        'RentalIncome': 1000}},
+              'SubjectProperty': {'Acreage': 42,
+                                  'Address': {'City': 'New York',
+                                              'Latitude': 43,
+                                              'ZipCode': '12345'}}}}
+```
+
+If we insert this into the database using jsonschema2db, it will create the following rows:
+
+```
+jsonschema2db-test=# select * from schm.root;
+-[ RECORD 1 ]------------------------+-----------
+id                                   | 1
+loan_file_id                         | 1000000000
+prefix                               |
+loan__amount                         | 500000
+subject_property__acreage            | 42
+subject_property__address__latitude  | 43
+subject_property__address__longitude |
+subject_property__address_id         | 1
+
+jsonschema2db-test=# select * from schm.basic_address;
+-[ RECORD 1 ]+---------------------------
+id           | 2
+loan_file_id | 1000000000
+prefix       | /RealEstateOwned/1/Address
+city         | Brooklyn
+root_id      | 1
+state        |
+street       |
+zip_code     | 65432
+-[ RECORD 2 ]+---------------------------
+id           | 1
+loan_file_id | 1000000000
+prefix       | /SubjectProperty/Address
+city         | New York
+root_id      | 1
+state        |
+street       |
+zip_code     | 12345
+
+jsonschema2db-test=# select * from schm.real_estate_owned;
+-[ RECORD 1 ]-+-------------------
+id            | 1
+loan_file_id  | 1000000000
+prefix        | /RealEstateOwned/1
+address_id    | 2
+rental_income | 1000
+root_id       | 1
+```
+
 Other
 ---
 

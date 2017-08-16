@@ -17,6 +17,7 @@ def test_lff():
                                       item_col_name='loan_file_id')
 
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    con.autocommit = True
 
     translator.create_tables(con)
     translator.insert_items(con, {
