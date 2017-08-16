@@ -7,8 +7,7 @@ ENV LC_ALL=en_US.utf-8
 
 # System dependencies
 RUN apk add --no-cache python3 python3-dev
-RUN python3 -m ensurepip
-RUN pip3 install --upgrade pip setuptools pytest
+RUN pip3 install --upgrade setuptools pytest
 
 RUN apk add --no-cache libffi-dev \
 libressl-dev \
@@ -16,23 +15,21 @@ gcc \
 musl-dev \
 git
 
-# Global dependencies
-COPY betterpy /opt/lib/betterpy/
-RUN ln -Tfs /opt/lib/betterpy ${dir}/../betterpy
+USER app
+
+# Postgres setup
+ENV PGDATA /home/app/postgres
+RUN initdb
 
 WORKDIR ${dir}
 
-# App dependencies
-COPY requirements.txt ${dir}/
-RUN pip install -r requirements.txt
-
 # File upload
-COPY run.py schema.json test.py ${dir}/
-COPY datalake_etl/ ${dir}/datalake_etl
-COPY tables/ ${dir}/tables
-RUN chown -R app: ${dir}
+COPY setup.py ${dir}/setup.py
+COPY test/ ${dir}/test
+COPY jsonschema2db/ ${dir}/jsonschema2db
 
 # App setup
-USER app
+RUN python3 setup.py install --user
 
-CMD true
+# Run test
+CMD pg_ctl -w start && createdb jsonschema2db-test && py.test test/test.py
