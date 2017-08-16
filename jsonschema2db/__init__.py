@@ -6,12 +6,13 @@ import warnings
 
 
 class JSONSchemaToPostgres:
-    def __init__(self, schema, postgres_schema=None, item_col_name='item_id', prefix_col_name='prefix', abbreviations={}):
+    def __init__(self, schema, postgres_schema=None, item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix', abbreviations={}):
         self._table_definitions = {}
         self._links = {}
         self._backlinks = {}
         self._postgres_schema = postgres_schema
         self._item_col_name = item_col_name
+        self._item_col_type = item_col_type
         self._prefix_col_name = prefix_col_name
         self._abbreviations = abbreviations
 
@@ -174,8 +175,8 @@ class JSONSchemaToPostgres:
                 cursor.execute('create schema %s' % self._postgres_schema)
             for table, columns in self._table_columns.items():
                 types = [self._table_definitions[table][column] for column in columns]
-                create_q = 'create table %s (id serial primary key, "%s" int not null, "%s" text not null, %s, unique ("%s", "%s"))' % \
-                           (self._postgres_table_name(table), self._item_col_name, self._prefix_col_name,
+                create_q = 'create table %s (id serial primary key, "%s" %s not null, "%s" text not null, %s, unique ("%s", "%s"))' % \
+                           (self._postgres_table_name(table), self._item_col_name, postgres_types[self._item_col_type], self._prefix_col_name,
                             ', '.join('"%s" %s' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
                 cursor.execute(create_q)
