@@ -10,9 +10,11 @@ Only Postgres is supported at the moment, although it should be fairly simple to
 Example
 ---
 
-TO DO
+TO DO – see [test.py](https://github.com/better/jsonschema2db/blob/master/test/test.py) for now.
 
-Misc
+Other
 ---
 
-Pull requests are very welcome. This repo uses the [MIT license](https://github.com/better/jsonschema2db/blob/master/LICENSE).
+* The code is tested with a full integration test running a Postgres server inside Docker.
+* Pull requests are very welcome.
+* This repo uses the [MIT license](https://github.com/better/jsonschema2db/blob/master/LICENSE).
