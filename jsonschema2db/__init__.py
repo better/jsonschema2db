@@ -2,6 +2,7 @@ import change_case
 import datetime
 import iso8601
 import json
+import warnings
 
 
 class JSONSchemaToPostgres:
@@ -32,8 +33,8 @@ class JSONSchemaToPostgres:
         for table, column_types in self._table_definitions.items():
             for column in column_types.keys():
                 if len(column) >= 64:
-                    log.warn('loan_file_fact_flat.ignoring_column', column=column)
-            columns = sorted(col for col in column_types.keys() if 0 < len(col) < 64)  # TODO: WTF
+                    warnings.warn('Ignoring_column because it is too long: %s.%s' % (table, column))
+            columns = sorted(col for col in column_types.keys() if 0 < len(col) < 64)
             if not columns:
                 continue
             self._table_columns[table] = columns
@@ -53,11 +54,11 @@ class JSONSchemaToPostgres:
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
             if len(p) != 2 and p[0] != 'definitions':
-                log.warn('log_file_fact_flat.broken_reference', ref=tree['$ref'])
+                warnings.warn('Broken reference: %s' % tree['$ref'])
                 return
             _, definition = p
             if definition not in schema['definitions']:
-                log.warn('log_file_fact_flat.broken_definition', definition=definition)
+                warnings.warn('Broken definitinos: %s' % definition)
                 return
             tree = schema['definitions'][definition]
 
@@ -72,7 +73,7 @@ class JSONSchemaToPostgres:
             res = {'_table': table, '_column': self._column_name(path), '_suffix': '/'.join(path), '_type': 'enum'}
         elif 'type' not in tree:
             res = {}
-            log.warn('log_file_fact_flat.type_info_missing')
+            warnings.warn('Type info missing: %s' % '/'.join(path))
         elif tree['type'] == 'object':
             res = {}
             if 'patternProperties' in tree:
@@ -95,10 +96,10 @@ class JSONSchemaToPostgres:
                     for p in tree['properties']:
                         res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent)
             else:
-                log.warn('log_file_fact_flat.type_error')
+                warnings.warn('Type error: %s' % ','.join(path))
         else:
             if tree['type'] not in ['string', 'boolean', 'number', 'integer']:
-                log.warn('log_file_fact_flat.type_error', type=tree['type'])
+                warnings.warn('Type error: %s: %s' % (tree['type'], '/'.join(path)))
                 return {}
             if definition in ['date', 'timestamp']:
                 t = definition
@@ -177,10 +178,11 @@ class JSONSchemaToPostgres:
                            (self._postgres_table_name(table), self._item_col_name, self._prefix_col_name,
                             ', '.join('"%s" %s' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
+                print(create_q)
                 cursor.execute(create_q)
                 cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
 
-    def insert_items(self, con, query_results, failure_count):
+    def insert_items(self, con, query_results, failure_count={}):
         res = {}
         for item_id, data in query_results.items():
             self._traverse_for_insertion(item_id, data, self._translation_tree, res, failure_count)
@@ -205,7 +207,6 @@ class JSONSchemaToPostgres:
             for ref_col_name, (prefix, to_table) in cols.items():
                 if from_table not in self._table_columns or to_table not in self._table_columns:
                     continue
-                log.info('loan_file_fact_flat.foreign_keys', from_table=from_table, ref_col_name=ref_col_name, prefix=prefix, to_table=to_table)
                 update_q = 'update %s as from_table set "%s" = to_table.id from (select "%s", "%s", id from %s) to_table' \
                            % (self._postgres_table_name(from_table), ref_col_name, self._item_col_name, self._prefix_col_name, self._postgres_table_name(to_table))
                 if prefix:

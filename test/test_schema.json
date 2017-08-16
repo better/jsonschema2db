@@ -1,0 +1,94 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "title": "Fact schema",
+    "type": "object",
+    "definitions": {
+        "basicAddress": {
+            "type": "object",
+            "properties": {
+                "City": {
+                    "type": "string"
+                },
+                "Country": {
+                    "type": "string"
+                },
+                "Full": {
+                    "type": "string"
+                },
+                "FullFirstLine": {
+                    "type": "string"
+                },
+                "State": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                },
+                "Street": {
+                    "type": "string"
+                },
+                "StreetSecondLine": {
+                    "type": "string"
+                },
+                "ZipCode": {
+                    "type": "object",
+                    "properties": {
+                        "FirstFive": {
+                            "type": "string"
+                        },
+                        "LastFour": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "address": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/basicAddress"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Latitude": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                        },
+                        "Longitude": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                        }
+                    }
+                }
+            ]
+        },
+        "unum": {
+            "type": "number",
+            "minimum": 0
+        }
+    },
+    "properties": {
+        "Loan": {
+            "type": "object",
+            "description": "Loan information",
+            "properties": {
+                "Amount": {
+                    "type": "number"
+                }
+            }
+        },
+        "SubjectProperty": {
+            "type": "object",
+            "properties": {
+                "Acreage": {
+                    "$ref": "#/definitions/unum"
+                },
+                "Address": {
+                    "$ref": "#/definitions/address"
+                }
+            }
+        }
+    }
+}
