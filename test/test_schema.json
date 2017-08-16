@@ -9,15 +9,6 @@
                 "City": {
                     "type": "string"
                 },
-                "Country": {
-                    "type": "string"
-                },
-                "Full": {
-                    "type": "string"
-                },
-                "FullFirstLine": {
-                    "type": "string"
-                },
                 "State": {
                     "type": "string",
                     "minLength": 2,
@@ -26,19 +17,8 @@
                 "Street": {
                     "type": "string"
                 },
-                "StreetSecondLine": {
-                    "type": "string"
-                },
                 "ZipCode": {
-                    "type": "object",
-                    "properties": {
-                        "FirstFive": {
-                            "type": "string"
-                        },
-                        "LastFour": {
-                            "type": "string"
-                        }
-                    }
+                    "type": "string"
                 }
             }
         },
@@ -87,6 +67,22 @@
                 },
                 "Address": {
                     "$ref": "#/definitions/address"
+                }
+            }
+        },
+        "RealEstateOwned": {
+            "type": "object",
+            "patternProperties": {
+                "[0-9]+": {
+                    "type": "object",
+                    "properties": {
+                        "Address": {
+                            "$ref": "#/definitions/basicAddress"
+                        },
+                        "RentalIncome": {
+                            "type": "number"
+                        }
+                    }
                 }
             }
         }

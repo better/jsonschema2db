@@ -178,7 +178,6 @@ class JSONSchemaToPostgres:
                            (self._postgres_table_name(table), self._item_col_name, self._prefix_col_name,
                             ', '.join('"%s" %s' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
-                print(create_q)
                 cursor.execute(create_q)
                 cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
 
