@@ -5,6 +5,8 @@ JSON Schema ➣ Database
 
 We use [JSON Schema](http://json-schema.org/) pretty extensively at [Better](https://better.com) to store complex data. Unfortunately the data is hard to query from SQL. To facilitate querying, this library converts objects stored in a JSON schema into flat Postgres tables with proper types.
 
+For instance, Better uses it to generate 50+ tables automatically, with millions of rows, from a very complex JSON schema that is 7000+ lines long.
+
 Only Postgres is supported at the moment, although it should be fairly simple to add other databases.
 
 Example
