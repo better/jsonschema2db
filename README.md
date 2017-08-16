@@ -56,7 +56,7 @@ create table "schm"."real_estate_owned" (
 )
 ```
 
-As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types. jsonschema2db also converts camel case into snake case since that's the Postgres convention.
+As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types. jsonschema2db also converts camel case into snake case since that's the Postgres convention. Unfortunately, Postgres limits column names to 63 characters. If you have longer column names, provide a list of abbreviations using the `abbreviations` parameter to the constructor.
 
 jsonschema2db also handles inserts into these tables by transforming them into a flattened form. On top of that, a number of foreign keys will be created and links between the tables.
 
@@ -123,6 +123,31 @@ prefix        | /RealEstateOwned/1
 address_id    | 2
 rental_income | 1000
 root_id       | 1
+```
+
+Usage
+---
+
+```python
+class JSONSchemaToPostgres:
+    def __init__(self,
+                 schema,  # The JSON schema, as a native Python dict
+                 postgres_schema=None,  # optimally a string denoting a postgres schema (namespace) under which all tables will be created
+                 item_col_name='item_id',  # the name of the main object key
+                 item_col_type='integer',  # type of the main object key (uses the type identifiers from JSON Schema)
+                 prefix_col_name='prefix',  # postgres column name identifying the subpaths in the object
+                 abbreviations={}):  # a string to string mapping containing replacements applied to each part of the path
+
+    def create_tables(self,
+                      con): # psycopg2 connection object
+
+    def insert_items(self,
+                     con,
+                     items,  # dict of key to objects using the JSON schema
+                     failure_count={}):  # Count failures by path (broken properties etc)
+
+    def create_links(self,
+                     con): # psycopg2 connection object
 ```
 
 Other

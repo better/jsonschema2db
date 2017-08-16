@@ -167,7 +167,6 @@ class JSONSchemaToPostgres:
             return '"%s"."%s"' % (self._postgres_schema, table)
 
     def create_tables(self, con):
-        # Create temporary schema with table structure
         postgres_types = {'boolean': 'bool', 'number': 'float', 'string': 'text', 'enum': 'text', 'integer': 'bigint', 'timestamp': 'timestamp', 'date': 'date', 'link': 'integer'}
         with con.cursor() as cursor:
             if self._postgres_schema is not None:
@@ -179,12 +178,13 @@ class JSONSchemaToPostgres:
                            (self._postgres_table_name(table), self._item_col_name, postgres_types[self._item_col_type], self._prefix_col_name,
                             ', '.join('"%s" %s' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
+                print(create_q)
                 cursor.execute(create_q)
                 cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
 
-    def insert_items(self, con, query_results, failure_count={}):
+    def insert_items(self, con, items, failure_count={}):
         res = {}
-        for item_id, data in query_results.items():
+        for item_id, data in items.items():
             self._traverse_for_insertion(item_id, data, self._translation_tree, res, failure_count)
 
         data_by_table = {}
@@ -201,7 +201,7 @@ class JSONSchemaToPostgres:
                 args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
                 cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
 
-    def create_links(self, con, postgres_schema=None):
+    def create_links(self, con):
         # Add foreign keys between tables
         for from_table, cols in self._links.items():
             for ref_col_name, (prefix, to_table) in cols.items():

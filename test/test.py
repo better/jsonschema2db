@@ -12,10 +12,15 @@ def query(con, q):
 
 def test_lff():
     schema = json.load(open('test/test_schema.json'))
-    translator = JSONSchemaToPostgres(schema,
-                                      postgres_schema='schm',
-                                      item_col_name='loan_file_id',
-                                      item_col_type='string')
+    translator = JSONSchemaToPostgres(
+        schema,
+        postgres_schema='schm',
+        item_col_name='loan_file_id',
+        item_col_type='string',
+        abbreviations={
+            'AbbreviateThisReallyLongColumn': 'AbbTRLC',
+        }
+    )
 
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     con.autocommit = True
@@ -32,8 +37,8 @@ def test_lff():
 
     assert list(query(con, 'select count(1) from schm.root')) == [(1,)]
     assert list(query(con, 'select count(1) from schm.basic_address')) == [(2,)]
-    assert list(query(con, 'select loan_file_id, prefix, loan__amount, subject_property__acreage, subject_property__address__latitude from schm.root')) == \
-        [('loan_file_abc123', '', 500000, 42.0, 43.0)]
+    assert list(query(con, 'select loan_file_id, prefix, loan__amount, subject_property__acreage, subject_property__address__latitude, loan__abb_trlc from schm.root')) == \
+        [('loan_file_abc123', '', 500000, 42.0, 43.0, None)]
     assert set(query(con, 'select loan_file_id, prefix, city, zip_code from schm.basic_address')) == \
         set([('loan_file_abc123', '/SubjectProperty/Address', 'New York', '12345'),
              ('loan_file_abc123', '/RealEstateOwned/1/Address', 'Brooklyn', '65432')])

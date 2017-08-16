@@ -56,6 +56,12 @@
             "properties": {
                 "Amount": {
                     "type": "number"
+                },
+                "SomeSuperLongColumnNameThatDoesntFitInPostgresUnfortunately": {
+                    "type": "number"
+                },
+                "AbbreviateThisReallyLongColumn": {
+                    "type": "number"
                 }
             }
         },
