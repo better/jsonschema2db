@@ -223,3 +223,8 @@ class JSONSchemaToPostgres:
                 with con.cursor() as cursor:
                     cursor.execute(update_q)
                     cursor.execute(alter_q)
+
+    def analyze(self, con):
+        with con.cursor() as cursor:
+            for table in self._table_definitions.keys():
+                cursor.execute('analyze %s' % self._postgres_table_name(table))

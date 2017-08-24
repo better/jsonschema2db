@@ -148,7 +148,12 @@ class JSONSchemaToPostgres:
 
     def create_links(self,
                      con): # psycopg2 connection object
+
+    def analyze(self,
+                con): # psycopg2 connection object
 ```
+
+Typically you want to instantiate a `JSONSchemaToPostgres` object, and run `create_tables` to create all the tables. After that, insert all data. Once you're done inserting, run `create_links` to populate all references properly and add foreign keys between tables. Optionally you can run `analyze` finally which optimizes the tables.
 
 Other
 ---

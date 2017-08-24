@@ -34,6 +34,7 @@ def test_lff():
         }
     })
     translator.create_links(con)
+    translator.analyze(con)
 
     assert list(query(con, 'select count(1) from schm.root')) == [(1,)]
     assert list(query(con, 'select count(1) from schm.basic_address')) == [(2,)]
