@@ -167,7 +167,7 @@ class JSONSchemaToPostgres:
             return '"%s"."%s"' % (self._postgres_schema, table)
 
     def create_tables(self, con):
-        postgres_types = {'boolean': 'bool', 'number': 'float', 'string': 'text', 'enum': 'text', 'integer': 'bigint', 'timestamp': 'timestamp', 'date': 'date', 'link': 'integer'}
+        postgres_types = {'boolean': 'bool', 'number': 'float', 'string': 'text', 'enum': 'text', 'integer': 'bigint', 'timestamp': 'timestamptz', 'date': 'date', 'link': 'integer'}
         with con.cursor() as cursor:
             if self._postgres_schema is not None:
                 cursor.execute('drop schema if exists %s cascade' % self._postgres_schema)
