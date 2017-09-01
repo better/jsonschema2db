@@ -51,6 +51,10 @@ class JSONSchemaToPostgres:
         # 1. A list of tables and columns (used to create tables dynamically)
         # 2. A tree (dicts of dicts) with a mapping for each fact into tables (used to map data)
         # 3. Links between entities
+        if type(tree) != dict:
+            warnings.warn('Broken subtree: /%s' % '/'.join(path))
+            return
+
         definition = None
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
