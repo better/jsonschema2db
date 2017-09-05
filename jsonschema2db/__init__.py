@@ -63,7 +63,7 @@ class JSONSchemaToPostgres:
                 return
             _, definition = p
             if definition not in schema['definitions']:
-                warnings.warn('Broken definitinos: %s' % definition)
+                warnings.warn('Broken definitions: %s' % definition)
                 return
             tree = schema['definitions'][definition]
 
@@ -113,7 +113,10 @@ class JSONSchemaToPostgres:
             self._table_definitions.setdefault(table, {})[self._column_name(path)] = t
             if parent is not None:
                 self._backlinks.setdefault(table, set()).add(parent)
-            res = {'_table': table, '_column': self._column_name(path), '_suffix': '/'.join(path), '_type': t}
+            res = {'_column': self._column_name(path), '_type': t}
+
+        res['_table'] = table
+        res['_suffix'] = '/'.join(path)
 
         return res
 
@@ -134,6 +137,15 @@ class JSONSchemaToPostgres:
         return True
 
     def _traverse_for_insertion(self, item_id, data, subtree, res, failure_count, path=tuple()):
+        table, suffix = subtree['_table'], subtree['_suffix']
+
+        # TODO: make the path prefix thing customizeable
+        prefix_suffix = '/' + '/'.join(path)
+        assert prefix_suffix.endswith(suffix)
+        prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
+
+        res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})
+
         if type(data) == dict:
             for k, v in data.items():
                 # intermediate node
@@ -143,6 +155,7 @@ class JSONSchemaToPostgres:
                     failure_count[path] = failure_count.get(path, 0) + 1
                 else:
                     self._traverse_for_insertion(item_id, data[k], subtree[k], res, failure_count, path + (k,))
+
         else:
             # value type
             if data is None:
@@ -150,17 +163,12 @@ class JSONSchemaToPostgres:
             if '_table' not in subtree:
                 failure_count[path] = failure_count.get(path, 0) + 1
                 return
-            table, col, suffix, t = subtree['_table'], subtree['_column'], subtree['_suffix'], subtree['_type']
+            col, t = subtree['_column'], subtree['_type']
             if table not in self._table_columns:
                 return
             if not self._is_valid_type(t, data):
                 failure_count[path] = failure_count.get(path, 0) + 1
                 return
-
-            # TODO: make the path prefix thing customizeable
-            path = '/' + '/'.join(path)
-            assert path.endswith(suffix)
-            prefix = path[:-len(suffix)].rstrip('/')
 
             res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})[col] = data
 
