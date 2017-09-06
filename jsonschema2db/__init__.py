@@ -111,9 +111,9 @@ class JSONSchemaToPostgres:
                     t = definition
                 else:
                     t = tree['type']
-                    self._table_definitions[table][self._column_name(path)] = t
-                    if parent is not None:
-                        self._backlinks.setdefault(table, set()).add(parent)
+                self._table_definitions[table][self._column_name(path)] = t
+                if parent is not None:
+                    self._backlinks.setdefault(table, set()).add(parent)
                 res = {'_column': self._column_name(path), '_type': t}
 
         res['_table'] = table
