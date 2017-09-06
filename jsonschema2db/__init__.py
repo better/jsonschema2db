@@ -36,8 +36,6 @@ class JSONSchemaToPostgres:
                 if len(column) >= 64:
                     warnings.warn('Ignoring_column because it is too long: %s.%s' % (table, column))
             columns = sorted(col for col in column_types.keys() if 0 < len(col) < 64)
-            if not columns:
-                continue
             self._table_columns[table] = columns
 
     def _table_name(self, path):
@@ -51,6 +49,10 @@ class JSONSchemaToPostgres:
         # 1. A list of tables and columns (used to create tables dynamically)
         # 2. A tree (dicts of dicts) with a mapping for each fact into tables (used to map data)
         # 3. Links between entities
+        if type(tree) != dict:
+            warnings.warn('Broken subtree: /%s' % '/'.join(path))
+            return
+
         definition = None
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
@@ -63,6 +65,8 @@ class JSONSchemaToPostgres:
                 return
             tree = schema['definitions'][definition]
 
+        self._table_definitions.setdefault(table, {})
+
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
             res = {}
@@ -70,7 +74,7 @@ class JSONSchemaToPostgres:
                 for q in tree[p]:
                     res.update(self._traverse(schema, q, path, table))
         elif 'enum' in tree:
-            self._table_definitions.setdefault(table, {})[self._column_name(path)] = 'enum'
+            self._table_definitions[table][self._column_name(path)] = 'enum'
             res = {'_table': table, '_column': self._column_name(path), '_suffix': '/'.join(path), '_type': 'enum'}
         elif 'type' not in tree:
             res = {}
@@ -90,7 +94,7 @@ class JSONSchemaToPostgres:
                         res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), parent)
                     if path != tuple():
                         ref_col_name = self._column_name(path) + '_id'
-                        self._table_definitions.setdefault(table, {})[ref_col_name] = 'link'
+                        self._table_definitions[table][ref_col_name] = 'link'
                         self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
                 else:
                     # Standard object, just traverse recursively
@@ -106,7 +110,7 @@ class JSONSchemaToPostgres:
                 t = definition
             else:
                 t = tree['type']
-            self._table_definitions.setdefault(table, {})[self._column_name(path)] = t
+            self._table_definitions[table][self._column_name(path)] = t
             if parent is not None:
                 self._backlinks.setdefault(table, set()).add(parent)
             res = {'_column': self._column_name(path), '_type': t}
@@ -182,9 +186,9 @@ class JSONSchemaToPostgres:
                 cursor.execute('create schema %s' % self._postgres_schema)
             for table, columns in self._table_columns.items():
                 types = [self._table_definitions[table][column] for column in columns]
-                create_q = 'create table %s (id serial primary key, "%s" %s not null, "%s" text not null, %s, unique ("%s", "%s"))' % \
+                create_q = 'create table %s (id serial primary key, "%s" %s not null, "%s" text not null, %s unique ("%s", "%s"))' % \
                            (self._postgres_table_name(table), self._item_col_name, postgres_types[self._item_col_type], self._prefix_col_name,
-                            ', '.join('"%s" %s' % (c, postgres_types[t]) for c, t in zip(columns, types)),
+                            ''.join('"%s" %s, ' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
                 cursor.execute(create_q)
                 cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
@@ -203,7 +207,7 @@ class JSONSchemaToPostgres:
 
         with con.cursor() as cursor:
             for table, data in data_by_table.items():
-                cols = '("%s", "%s", %s)' % (self._item_col_name, self._prefix_col_name, ','.join('"%s"' % c for c in self._table_columns[table]))
+                cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
                 pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
                 args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
                 cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
