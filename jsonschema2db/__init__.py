@@ -75,7 +75,7 @@ class JSONSchemaToPostgres:
                     res.update(self._traverse(schema, q, path, table))
         elif 'enum' in tree:
             self._table_definitions[table][self._column_name(path)] = 'enum'
-            res = {'_table': table, '_column': self._column_name(path), '_suffix': '/'.join(path), '_type': 'enum'}
+            res = {'_column': self._column_name(path), '_type': 'enum'}
         elif 'type' not in tree:
             res = {}
             warnings.warn('Type info missing: %s' % '/'.join(path))
@@ -105,15 +105,16 @@ class JSONSchemaToPostgres:
         else:
             if tree['type'] not in ['string', 'boolean', 'number', 'integer']:
                 warnings.warn('Type error: %s: %s' % (tree['type'], '/'.join(path)))
-                return {}
-            if definition in ['date', 'timestamp']:
-                t = definition
+                res = {}
             else:
-                t = tree['type']
-            self._table_definitions[table][self._column_name(path)] = t
-            if parent is not None:
-                self._backlinks.setdefault(table, set()).add(parent)
-            res = {'_column': self._column_name(path), '_type': t}
+                if definition in ['date', 'timestamp']:
+                    t = definition
+                else:
+                    t = tree['type']
+                    self._table_definitions[table][self._column_name(path)] = t
+                    if parent is not None:
+                        self._backlinks.setdefault(table, set()).add(parent)
+                res = {'_column': self._column_name(path), '_type': t}
 
         res['_table'] = table
         res['_suffix'] = '/'.join(path)
@@ -160,7 +161,7 @@ class JSONSchemaToPostgres:
             # value type
             if data is None:
                 return
-            if '_table' not in subtree:
+            if '_column' not in subtree:
                 failure_count[path] = failure_count.get(path, 0) + 1
                 return
             col, t = subtree['_column'], subtree['_type']
