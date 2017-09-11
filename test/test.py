@@ -23,8 +23,6 @@ def test_lff():
     )
 
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
-    con.autocommit = True
-
     translator.create_tables(con)
     translator.insert_items(con, {
         'loan_file_abc123': {
@@ -52,3 +50,35 @@ def test_lff():
         set(query(con, 'select id from schm.basic_address'))
     assert set(query(con, 'select root_id from schm.real_estate_owned')) == \
         set(query(con, 'select id from schm.root'))
+
+
+def test_pp_to_def():
+    schema = json.load(open('test/test_pp_to_def.json'))
+    translator = JSONSchemaToPostgres(schema)
+    con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    translator.create_tables(con)
+    translator.insert_items(con, {33: {'aBunchOfDocuments': {'xyz': {'url': 'http://baz.bar'}},
+                                       'moreDocuments': {'abc': {'url': 'https://banana'}}}})
+    translator.create_links(con)
+    translator.analyze(con)
+
+    assert list(query(con, 'select count(1) from root')) == [(1,)]
+    assert list(query(con, 'select count(1) from file')) == [(2,)]
+
+    assert list(query(con, 'select id, prefix, item_id from root')) == [(1, '', 33)]
+    assert list(query(con, 'select id, prefix, item_id, root_id from a_bunch_of_documents')) == \
+        [(1, '/aBunchOfDocuments/xyz', 33, 1)]
+    assert set(query(con, 'select prefix, url, item_id from file')) == \
+        set([('/aBunchOfDocuments/xyz', 'http://baz.bar', 33),
+             ('/moreDocuments/abc', 'https://banana', 33)])
+    assert set(list(query(con, 'select file_id from a_bunch_of_documents')) +
+               list(query(con, 'select file_id from more_documents'))) == set([(1,), (2,)])
+
+
+def test_comments():
+    schema = json.load(open('test/test_pp_to_def.json'))
+    translator = JSONSchemaToPostgres(schema)
+
+    # A bit ugly to look at private members, but pulling comments out of postgres is a pain
+    assert translator._table_comments == {'root': 'the root of everything', 'file': 'this is a file'}
+    assert translator._column_comments == {'file': {'url': 'the url of the file'}}
