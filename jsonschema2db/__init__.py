@@ -55,6 +55,14 @@ class JSONSchemaToPostgres:
             warnings.warn('Broken subtree: /%s' % '/'.join(path))
             return
 
+        if parent is not None:
+            self._backlinks.setdefault(table, set()).add(parent)
+
+        if table not in self._table_definitions:
+            self._table_definitions[table] = {}
+            if 'comment' in tree:
+                self._table_comments[table] = tree['comment']
+
         definition = None
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
@@ -66,11 +74,6 @@ class JSONSchemaToPostgres:
                 warnings.warn('Broken definitions: %s' % definition)
                 return
             tree = schema['definitions'][definition]
-
-        if table not in self._table_definitions:
-            self._table_definitions[table] = {}
-            if 'comment' in tree:
-                self._table_comments[table] = tree['comment']
 
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
@@ -97,12 +100,14 @@ class JSONSchemaToPostgres:
             elif 'properties' in tree:
                 if definition:
                     # This is a shared definition, so create a new table (if not already exists)
-                    for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), parent)
-                    if path != tuple():
+                    if path == tuple():
+                        ref_col_name = self._table_name([definition]) + '_id'
+                    else:
                         ref_col_name = self._column_name(path) + '_id'
-                        self._table_definitions[table][ref_col_name] = 'link'
-                        self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
+                    for p in tree['properties']:
+                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)))
+                    self._table_definitions[table][ref_col_name] = 'link'
+                    self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
                 else:
                     # Standard object, just traverse recursively
                     for p in tree['properties']:
@@ -119,8 +124,6 @@ class JSONSchemaToPostgres:
                 else:
                     t = tree['type']
                 self._table_definitions[table][self._column_name(path)] = t
-                if parent is not None:
-                    self._backlinks.setdefault(table, set()).add(parent)
                 if 'comment' in tree:
                     self._column_comments.setdefault(table, {})[self._column_name(path)] = tree['comment']
                 res = {'_column': self._column_name(path), '_type': t}

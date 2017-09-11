@@ -1,0 +1,31 @@
+{
+    "definitions": {
+        "file": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "type": "object",
+    "properties": {
+        "aBunchOfDocuments": {
+            "type": "object",
+            "patternProperties": {
+                ".*": {
+                    "$ref": "#/definitions/file"
+                }
+            }
+        },
+        "moreDocuments": {
+            "type": "object",
+            "patternProperties": {
+                ".*": {
+                    "$ref": "#/definitions/file"
+                }
+            }
+        }
+    }
+}
