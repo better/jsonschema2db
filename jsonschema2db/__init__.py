@@ -19,7 +19,7 @@ class JSONSchemaToPostgres:
         self._column_comments = {}
 
         # Walk the schema and build up the translation tables
-        self._translation_tree = self._traverse(schema, schema)
+        self._translation_tree = self._traverse(schema, schema, comment=schema.get('comment'))
 
         # Need to compile all the backlinks that uniquely identify a parent and add columns for them
         for child_table in self._backlinks:
@@ -46,7 +46,7 @@ class JSONSchemaToPostgres:
     def _column_name(self, path):
         return self._table_name(path)  # same
 
-    def _traverse(self, schema, tree, path=tuple(), table='root', parent=None):
+    def _traverse(self, schema, tree, path=tuple(), table='root', parent=None, comment=None):
         # Computes a bunch of stuff
         # 1. A list of tables and columns (used to create tables dynamically)
         # 2. A tree (dicts of dicts) with a mapping for each fact into tables (used to map data)
@@ -60,8 +60,8 @@ class JSONSchemaToPostgres:
 
         if table not in self._table_definitions:
             self._table_definitions[table] = {}
-            if 'comment' in tree:
-                self._table_comments[table] = tree['comment']
+            if comment:
+                self._table_comments[table] = comment
 
         definition = None
         while '$ref' in tree:
@@ -105,13 +105,13 @@ class JSONSchemaToPostgres:
                     else:
                         ref_col_name = self._column_name(path) + '_id'
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)))
+                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)), tree.get('comment'))
                     self._table_definitions[table][ref_col_name] = 'link'
                     self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
                 else:
                     # Standard object, just traverse recursively
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent)
+                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'))
             else:
                 warnings.warn('Type error: %s' % ','.join(path))
         else:

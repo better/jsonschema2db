@@ -2,17 +2,21 @@
     "definitions": {
         "file": {
             "type": "object",
+            "comment": "this is a file",
             "properties": {
                 "url": {
+                    "comment": "the url of the file",
                     "type": "string"
                 }
             }
         }
     },
     "type": "object",
+    "comment": "the root of everything",
     "properties": {
         "aBunchOfDocuments": {
             "type": "object",
+            "comment": "this is a bunch of documents",
             "patternProperties": {
                 ".*": {
                     "$ref": "#/definitions/file"

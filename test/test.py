@@ -74,3 +74,11 @@ def test_pp_to_def():
     assert set(list(query(con, 'select file_id from a_bunch_of_documents')) +
                list(query(con, 'select file_id from more_documents'))) == set([(1,), (2,)])
 
+
+def test_comments():
+    schema = json.load(open('test/test_pp_to_def.json'))
+    translator = JSONSchemaToPostgres(schema)
+
+    # A bit ugly to look at private members, but pulling comments out of postgres is a pain
+    assert translator._table_comments == {'root': 'the root of everything', 'file': 'this is a file'}
+    assert translator._column_comments == {'file': {'url': 'the url of the file'}}
