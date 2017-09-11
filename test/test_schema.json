@@ -5,9 +5,11 @@
     "definitions": {
         "basicAddress": {
             "type": "object",
+            "comment": "This is an address",
             "properties": {
                 "City": {
-                    "type": "string"
+                    "type": "string",
+                    "comment": "This is a city"
                 },
                 "State": {
                     "type": "string",

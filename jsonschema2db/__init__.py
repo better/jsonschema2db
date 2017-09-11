@@ -15,6 +15,8 @@ class JSONSchemaToPostgres:
         self._item_col_type = item_col_type
         self._prefix_col_name = prefix_col_name
         self._abbreviations = abbreviations
+        self._table_comments = {}
+        self._column_comments = {}
 
         # Walk the schema and build up the translation tables
         self._translation_tree = self._traverse(schema, schema)
@@ -65,7 +67,10 @@ class JSONSchemaToPostgres:
                 return
             tree = schema['definitions'][definition]
 
-        self._table_definitions.setdefault(table, {})
+        if table not in self._table_definitions:
+            self._table_definitions[table] = {}
+            if 'comment' in tree:
+                self._table_comments[table] = tree['comment']
 
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
@@ -75,6 +80,8 @@ class JSONSchemaToPostgres:
                     res.update(self._traverse(schema, q, path, table))
         elif 'enum' in tree:
             self._table_definitions[table][self._column_name(path)] = 'enum'
+            if 'comment' in tree:
+                self._column_comments.setdefault(table, {})[self._column_name(path)] = tree['comment']
             res = {'_column': self._column_name(path), '_type': 'enum'}
         elif 'type' not in tree:
             res = {}
@@ -114,6 +121,8 @@ class JSONSchemaToPostgres:
                 self._table_definitions[table][self._column_name(path)] = t
                 if parent is not None:
                     self._backlinks.setdefault(table, set()).add(parent)
+                if 'comment' in tree:
+                    self._column_comments.setdefault(table, {})[self._column_name(path)] = tree['comment']
                 res = {'_column': self._column_name(path), '_type': t}
 
         res['_table'] = table
@@ -193,6 +202,11 @@ class JSONSchemaToPostgres:
                             self._item_col_name, self._prefix_col_name)
                 cursor.execute(create_q)
                 cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
+                if table in self._table_comments:
+                    cursor.execute('comment on table %s is %%s' % self._postgres_table_name(table), (self._table_comments[table],))
+                for c in columns:
+                    if c in self._column_comments.get(table, {}):
+                        cursor.execute('comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
     def insert_items(self, con, items, failure_count={}):
         res = {}
