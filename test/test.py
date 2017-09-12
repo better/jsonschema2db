@@ -80,5 +80,7 @@ def test_comments():
     translator = JSONSchemaToPostgres(schema)
 
     # A bit ugly to look at private members, but pulling comments out of postgres is a pain
-    assert translator._table_comments == {'root': 'the root of everything', 'file': 'this is a file'}
+    assert translator._table_comments == {'root': 'the root of everything',
+                                          'file': 'this is a file',
+                                          'a_bunch_of_documents': 'this is a bunch of documents'}
     assert translator._column_comments == {'file': {'url': 'the url of the file'}}
