@@ -145,6 +145,9 @@ class JSONSchemaToPostgres:
                 iso8601.parse_date(value)
             elif t == 'date':
                 iso8601.parse_date(value + 'T00:00:00Z')
+            elif t == 'string':
+                # Allow coercing ints/floats, but nothing else
+                assert type(value) in [str, int, float]
         except:
             return False
         return True
@@ -188,8 +191,13 @@ class JSONSchemaToPostgres:
     def insert_items(self, con, items, failure_count={}):
         ''' Inserts data into database.
 
-        `items` can be either a nested dict conforming to the JSON spec, or a list/iterator of pairs where the first item in the pair
-        is a tuple specifying the path, and the second value in the pair is the value.'''
+        `items` is a dict where they keys are item ids and each value is an item either:
+        - A nested dict conforming to the JSON spec
+        - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
+
+        Returns a dict counting the number of failures for paths (keys are tuples, values are integers).
+        You can add to an existing dict by passing it in as `failure_count`.
+        '''
         res = {}
         failure_count = {}
         for item_id, data in items.items():
@@ -244,6 +252,8 @@ class JSONSchemaToPostgres:
                 pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
                 args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
                 cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
+
+        return failure_count
 
     def create_links(self, con):
         # Add foreign keys between tables
