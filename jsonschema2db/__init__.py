@@ -145,45 +145,22 @@ class JSONSchemaToPostgres:
                 iso8601.parse_date(value)
             elif t == 'date':
                 iso8601.parse_date(value + 'T00:00:00Z')
+            elif t == 'string':
+                # Allow coercing ints/floats, but nothing else
+                assert type(value) in [str, int, float]
         except:
             return False
         return True
 
-    def _traverse_for_insertion(self, item_id, data, subtree, res, failure_count, path=tuple()):
-        table, suffix = subtree['_table'], subtree['_suffix']
-
-        # TODO: make the path prefix thing customizeable
-        prefix_suffix = '/' + '/'.join(path)
-        assert prefix_suffix.endswith(suffix)
-        prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
-
-        res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})
-
+    def _flatten_dict(self, data, res=None, path=tuple()):
+        if res is None:
+            res = []
         if type(data) == dict:
             for k, v in data.items():
-                # intermediate node
-                if '*' in subtree:
-                    self._traverse_for_insertion(item_id, data[k], subtree['*'], res, failure_count, path + (k,))
-                elif k not in subtree:
-                    failure_count[path] = failure_count.get(path, 0) + 1
-                else:
-                    self._traverse_for_insertion(item_id, data[k], subtree[k], res, failure_count, path + (k,))
-
+                self._flatten_dict(v, res, path+(k,))
         else:
-            # value type
-            if data is None:
-                return
-            if '_column' not in subtree:
-                failure_count[path] = failure_count.get(path, 0) + 1
-                return
-            col, t = subtree['_column'], subtree['_type']
-            if table not in self._table_columns:
-                return
-            if not self._is_valid_type(t, data):
-                failure_count[path] = failure_count.get(path, 0) + 1
-                return
-
-            res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})[col] = data
+            res.append((path, data))
+        return res
 
     def _postgres_table_name(self, table):
         if self._postgres_schema is None:
@@ -212,9 +189,55 @@ class JSONSchemaToPostgres:
                         cursor.execute('comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
     def insert_items(self, con, items, failure_count={}):
+        ''' Inserts data into database.
+
+        `items` is a dict where they keys are item ids and each value is an item either:
+        - A nested dict conforming to the JSON spec
+        - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
+
+        Returns a dict counting the number of failures for paths (keys are tuples, values are integers).
+        You can add to an existing dict by passing it in as `failure_count`.
+        '''
         res = {}
+        failure_count = {}
         for item_id, data in items.items():
-            self._traverse_for_insertion(item_id, data, self._translation_tree, res, failure_count)
+            if type(data) == dict:
+                data = self._flatten_dict(data)
+            for path, value in data:
+                if value is None:
+                    continue
+
+                res.setdefault(item_id, {}).setdefault(self._translation_tree['_table'], {}).setdefault('', {})
+                subtree = self._translation_tree
+                for index, path_part in enumerate(path):
+                    if '*' in subtree:
+                        subtree = subtree['*']
+                    elif path_part not in subtree:
+                        failure_count[path] = failure_count.get(path, 0) + 1
+                        break
+                    else:
+                        subtree = subtree[path_part]
+
+                    # Compute the prefix, add an empty entry (TODO: should make the prefix customizeable)
+                    table, suffix = subtree['_table'], subtree['_suffix']
+                    prefix_suffix = '/' + '/'.join(path[:(index+1)])
+                    assert prefix_suffix.endswith(suffix)
+                    prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
+                    res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})
+
+                # Leaf node with value, validate and prepare for insertion
+                if '_column' not in subtree:
+                    failure_count[path] = failure_count.get(path, 0) + 1
+                    continue
+                col, t = subtree['_column'], subtree['_type']
+                if table not in self._table_columns:
+                    failure_count[path] = failure_count.get(path, 0) + 1
+                    continue
+                if not self._is_valid_type(t, value):
+                    failure_count[path] = failure_count.get(path, 0) + 1
+                    continue
+
+                res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})[col] = value
 
         data_by_table = {}
         for item_id, item_data in res.items():
@@ -229,6 +252,8 @@ class JSONSchemaToPostgres:
                 pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
                 args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
                 cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
+
+        return failure_count
 
     def create_links(self, con):
         # Add foreign keys between tables
