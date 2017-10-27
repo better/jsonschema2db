@@ -93,7 +93,8 @@ class JSONSchemaToPostgres:
             res = {}
             if 'patternProperties' in tree:
                 # Always create a new table for the pattern properties
-                assert len(tree['patternProperties']) == 1
+                if len(tree['patternProperties']) > 1:
+                    warnings.warn('path %s has multiple pattern properties' % '/'.join(path))
                 for p in tree['patternProperties']:
                     ref_col_name = table + '_id'
                     res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'))
