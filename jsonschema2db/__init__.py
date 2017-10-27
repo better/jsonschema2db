@@ -52,7 +52,7 @@ class JSONSchemaToPostgres:
         # 2. A tree (dicts of dicts) with a mapping for each fact into tables (used to map data)
         # 3. Links between entities
         if type(tree) != dict:
-            warnings.warn('Broken subtree: /%s' % '/'.join(path))
+            warnings.warn('%s.%s: Broken subtree' % (table, self._column_name(path)))
             return
 
         if parent is not None:
@@ -67,11 +67,11 @@ class JSONSchemaToPostgres:
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
             if len(p) != 2 and p[0] != 'definitions':
-                warnings.warn('Broken reference: %s' % tree['$ref'])
+                warnings.warn('%s.%s: Broken reference: %s' % (table, self._column_name(path), tree['$ref']))
                 return
             _, definition = p
             if definition not in schema['definitions']:
-                warnings.warn('Broken definitions: %s' % definition)
+                warnings.warn('%s.%s: Broken definition: %s' % (table, self._column_name(path), definition))
                 return
             tree = schema['definitions'][definition]
 
@@ -88,16 +88,17 @@ class JSONSchemaToPostgres:
             res = {'_column': self._column_name(path), '_type': 'enum'}
         elif 'type' not in tree:
             res = {}
-            warnings.warn('Type info missing: %s' % '/'.join(path))
+            warnings.warn('%s.%s: Type info missing' % (table, self._column_name(path)))
         elif tree['type'] == 'object':
             res = {}
             if 'patternProperties' in tree:
                 # Always create a new table for the pattern properties
                 if len(tree['patternProperties']) > 1:
-                    warnings.warn('path %s has multiple pattern properties' % '/'.join(path))
+                    warnings.warn('%s.%s: Multiple patternProperties, will ignore all except first' % (table, self._column_name(path)))
                 for p in tree['patternProperties']:
                     ref_col_name = table + '_id'
                     res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'))
+                    break
             elif 'properties' in tree:
                 if definition:
                     # This is a shared definition, so create a new table (if not already exists)
@@ -114,10 +115,10 @@ class JSONSchemaToPostgres:
                     for p in tree['properties']:
                         res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'))
             else:
-                warnings.warn('Type error: %s' % ','.join(path))
+                warnings.warn('%s.%s: Object with neither properties nor patternProperties' % (table, self._column_name(path)))
         else:
             if tree['type'] not in ['string', 'boolean', 'number', 'integer']:
-                warnings.warn('Type error: %s: %s' % (tree['type'], '/'.join(path)))
+                warnings.warn('%s.%s: Type error: %s' % (table, self._column_name(path), tree['type']))
                 res = {}
             else:
                 if definition in ['date', 'timestamp']:
