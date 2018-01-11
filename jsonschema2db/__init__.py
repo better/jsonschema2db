@@ -214,7 +214,7 @@ class JSONSchemaToPostgres:
                 for index, path_part in enumerate(path):
                     if '*' in subtree:
                         subtree = subtree['*']
-                    elif path_part not in subtree:
+                    elif not subtree.get(path_part):
                         failure_count[path] = failure_count.get(path, 0) + 1
                         break
                     else:
