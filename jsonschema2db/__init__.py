@@ -138,9 +138,9 @@ class JSONSchemaToPostgres:
     def _is_valid_type(self, t, value):
         try:
             if t == 'number':
-                float(value)
+                assert type(t) in [int, float]
             elif t == 'integer':
-                int(value)
+                assert type(t) == int
             elif t == 'boolean':
                 assert type(value) == bool
             elif t == 'timestamp':
