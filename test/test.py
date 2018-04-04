@@ -57,14 +57,14 @@ def test_pp_to_def():
     translator = JSONSchemaToPostgres(schema)
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
-    failure_count = translator.insert_items(con, {33: [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
-                                                       (('moreDocuments', 'abc', 'url'), 'https://banana'),
-                                                       (('moreDocuments', 'abc', 'url'), ['wrong-type']),
-                                                       (('moreDocuments', 'abc'), 'broken-value-ignore')]})
+    translator.insert_items(con, {33: [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
+                                       (('moreDocuments', 'abc', 'url'), 'https://banana'),
+                                       (('moreDocuments', 'abc', 'url'), ['wrong-type']),
+                                       (('moreDocuments', 'abc'), 'broken-value-ignore')]})
     translator.create_links(con)
     translator.analyze(con)
 
-    assert failure_count == {('moreDocuments', 'abc'): 1, ('moreDocuments', 'abc', 'url'): 1}
+    assert translator.failure_count == {('moreDocuments', 'abc'): 1, ('moreDocuments', 'abc', 'url'): 1}
 
     assert list(query(con, 'select count(1) from root')) == [(1,)]
     assert list(query(con, 'select count(1) from file')) == [(2,)]
