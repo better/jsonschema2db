@@ -7,7 +7,7 @@ setup(name='JSONSchema2DB',
       description='Generate database tables from JSON schema',
       author='Erik Bernhardsson',
       author_email='mail@erikbern.com',
-      packages=['jsonschema2db'],
+      py_modules=['jsonschema2db'],
       install_requires=[
           'change_case==0.5.2',
           'iso8601==0.1.12',
