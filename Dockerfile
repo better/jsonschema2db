@@ -24,9 +24,8 @@ RUN initdb
 WORKDIR ${dir}
 
 # File upload
-COPY setup.py ${dir}/setup.py
+COPY setup.py jsonschema2db.py ${dir}/
 COPY test/ ${dir}/test
-COPY jsonschema2db/ ${dir}/jsonschema2db
 
 # App setup
 RUN python3 setup.py install --user
