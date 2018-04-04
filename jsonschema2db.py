@@ -18,6 +18,10 @@ class JSONSchemaToPostgres:
         self._table_comments = {}
         self._column_comments = {}
 
+        # Various counters used for diagnostics during insertions
+        self.failure_count = {}  # path -> count
+        self.json_path_count = {}  # json path -> count
+
         # Walk the schema and build up the translation tables
         self._translation_tree = self._traverse(schema, schema, comment=schema.get('comment'))
 
@@ -46,7 +50,7 @@ class JSONSchemaToPostgres:
     def _column_name(self, path):
         return self._table_name(path)  # same
 
-    def _traverse(self, schema, tree, path=tuple(), table='root', parent=None, comment=None):
+    def _traverse(self, schema, tree, path=tuple(), table='root', parent=None, comment=None, json_path=tuple()):
         # Computes a bunch of stuff
         # 1. A list of tables and columns (used to create tables dynamically)
         # 2. A tree (dicts of dicts) with a mapping for each fact into tables (used to map data)
@@ -74,13 +78,14 @@ class JSONSchemaToPostgres:
                 warnings.warn('%s.%s: Broken definition: %s' % (table, self._column_name(path), definition))
                 return
             tree = schema['definitions'][definition]
+            json_path = ('definitions', definition)
 
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
             res = {}
             for p in special_keys:
                 for q in tree[p]:
-                    res.update(self._traverse(schema, q, path, table))
+                    res.update(self._traverse(schema, q, path, table, json_path=json_path + (p,)))
         elif 'enum' in tree:
             self._table_definitions[table][self._column_name(path)] = 'enum'
             if 'comment' in tree:
@@ -97,7 +102,7 @@ class JSONSchemaToPostgres:
                     warnings.warn('%s.%s: Multiple patternProperties, will ignore all except first' % (table, self._column_name(path)))
                 for p in tree['patternProperties']:
                     ref_col_name = table + '_id'
-                    res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'))
+                    res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'), json_path+('patternProperties', p))
                     break
             elif 'properties' in tree:
                 if definition:
@@ -107,17 +112,19 @@ class JSONSchemaToPostgres:
                     else:
                         ref_col_name = self._column_name(path) + '_id'
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)), tree.get('comment'))
+                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)), tree.get('comment'), json_path+('properties', p))
                     self._table_definitions[table][ref_col_name] = 'link'
                     self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
                 else:
                     # Standard object, just traverse recursively
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'))
+                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'), json_path+('properties', p))
             else:
                 warnings.warn('%s.%s: Object with neither properties nor patternProperties' % (table, self._column_name(path)))
         else:
-            if tree['type'] not in ['string', 'boolean', 'number', 'integer']:
+            if tree['type'] == 'null':
+                res = {}
+            elif tree['type'] not in ['string', 'boolean', 'number', 'integer']:
                 warnings.warn('%s.%s: Type error: %s' % (table, self._column_name(path), tree['type']))
                 res = {}
             else:
@@ -132,6 +139,8 @@ class JSONSchemaToPostgres:
 
         res['_table'] = table
         res['_suffix'] = '/'.join(path)
+        res['_json_path'] = '.'.join(json_path)
+        self.json_path_count['.'.join(json_path)] = 0
 
         return res
 
@@ -192,18 +201,18 @@ class JSONSchemaToPostgres:
                     if c in self._column_comments.get(table, {}):
                         cursor.execute('comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
-    def insert_items(self, con, items, failure_count={}):
+    def insert_items(self, con, items, mutate=True):
         ''' Inserts data into database.
 
         `items` is a dict where they keys are item ids and each value is an item either:
         - A nested dict conforming to the JSON spec
         - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
 
-        Returns a dict counting the number of failures for paths (keys are tuples, values are integers).
-        You can add to an existing dict by passing it in as `failure_count`.
+        If `mutate` is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
+
+        Updates self.failure_count, a dict counting the number of failures for paths (keys are tuples, values are integers).
         '''
         res = {}
-        failure_count = {}
         for item_id, data in items.items():
             if type(data) == dict:
                 data = self._flatten_dict(data)
@@ -211,13 +220,15 @@ class JSONSchemaToPostgres:
                 if value is None:
                     continue
 
-                res.setdefault(item_id, {}).setdefault(self._translation_tree['_table'], {}).setdefault('', {})
                 subtree = self._translation_tree
+                res.setdefault(item_id, {}).setdefault(subtree['_table'], {}).setdefault('', {})
+                self.json_path_count[subtree['_json_path']] += 1
+
                 for index, path_part in enumerate(path):
                     if '*' in subtree:
                         subtree = subtree['*']
                     elif not subtree.get(path_part):
-                        failure_count[path] = failure_count.get(path, 0) + 1
+                        self.failure_count[path] = self.failure_count.get(path, 0) + 1
                         break
                     else:
                         subtree = subtree[path_part]
@@ -228,17 +239,18 @@ class JSONSchemaToPostgres:
                     assert prefix_suffix.endswith(suffix)
                     prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
                     res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})
+                    self.json_path_count[subtree['_json_path']] += 1
 
                 # Leaf node with value, validate and prepare for insertion
                 if '_column' not in subtree:
-                    failure_count[path] = failure_count.get(path, 0) + 1
+                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
                 col, t = subtree['_column'], subtree['_type']
                 if table not in self._table_columns:
-                    failure_count[path] = failure_count.get(path, 0) + 1
+                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
                 if not self._is_valid_type(t, value):
-                    failure_count[path] = failure_count.get(path, 0) + 1
+                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
 
                 res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})[col] = value
@@ -250,14 +262,13 @@ class JSONSchemaToPostgres:
                     row_array = [item_id, prefix] + [row_values.get(t) for t in self._table_columns[table]]
                     data_by_table.setdefault(table, []).append(row_array)
 
-        with con.cursor() as cursor:
-            for table, data in data_by_table.items():
-                cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
-                pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
-                args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
-                cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
-
-        return failure_count
+        if mutate:
+            with con.cursor() as cursor:
+                for table, data in data_by_table.items():
+                    cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
+                    pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
+                    args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
+                    cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
 
     def create_links(self, con):
         # Add foreign keys between tables
