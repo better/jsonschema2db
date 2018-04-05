@@ -88,6 +88,7 @@ class JSONSchemaToPostgres:
             for p in special_keys:
                 for q in tree[p]:
                     res.update(self._traverse(schema, q, path, table, json_path=new_json_path))
+            return res  # This is a special node, don't store any more information
         elif 'enum' in tree:
             self._table_definitions[table][self._column_name(path)] = 'enum'
             if 'comment' in tree:
