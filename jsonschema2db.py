@@ -68,8 +68,10 @@ class JSONSchemaToPostgres:
                 self._table_comments[table] = comment
 
         definition = None
+        new_json_path = json_path
         while '$ref' in tree:
             p = tree['$ref'].lstrip('#').lstrip('/').split('/')
+            # TODO: I actually don't think it's required JSON schema that all definitions have to go under #/definitions
             if len(p) != 2 and p[0] != 'definitions':
                 warnings.warn('%s.%s: Broken reference: %s' % (table, self._column_name(path), tree['$ref']))
                 return
@@ -78,14 +80,14 @@ class JSONSchemaToPostgres:
                 warnings.warn('%s.%s: Broken definition: %s' % (table, self._column_name(path), definition))
                 return
             tree = schema['definitions'][definition]
-            json_path = ('definitions', definition)
+            new_json_path = ('#', 'definitions', definition)
 
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
             res = {}
             for p in special_keys:
                 for q in tree[p]:
-                    res.update(self._traverse(schema, q, path, table, json_path=json_path + (p,)))
+                    res.update(self._traverse(schema, q, path, table, json_path=new_json_path))
         elif 'enum' in tree:
             self._table_definitions[table][self._column_name(path)] = 'enum'
             if 'comment' in tree:
@@ -102,7 +104,7 @@ class JSONSchemaToPostgres:
                     warnings.warn('%s.%s: Multiple patternProperties, will ignore all except first' % (table, self._column_name(path)))
                 for p in tree['patternProperties']:
                     ref_col_name = table + '_id'
-                    res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'), json_path+('patternProperties', p))
+                    res['*'] = self._traverse(schema, tree['patternProperties'][p], tuple(), self._table_name(path), (table, ref_col_name, self._column_name(path)), tree.get('comment'), new_json_path + (p,))
                     break
             elif 'properties' in tree:
                 if definition:
@@ -112,13 +114,13 @@ class JSONSchemaToPostgres:
                     else:
                         ref_col_name = self._column_name(path) + '_id'
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)), tree.get('comment'), json_path+('properties', p))
+                        res[p] = self._traverse(schema, tree['properties'][p], (p, ), self._table_name([definition]), (table, ref_col_name, self._column_name(path)), tree.get('comment'), new_json_path + (p,))
                     self._table_definitions[table][ref_col_name] = 'link'
                     self._links.setdefault(table, {})[ref_col_name] = ('/'.join(path), self._table_name([definition]))
                 else:
                     # Standard object, just traverse recursively
                     for p in tree['properties']:
-                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'), json_path+('properties', p))
+                        res[p] = self._traverse(schema, tree['properties'][p], path + (p,), table, parent, tree.get('comment'), new_json_path + (p,))
             else:
                 warnings.warn('%s.%s: Object with neither properties nor patternProperties' % (table, self._column_name(path)))
         else:
@@ -139,8 +141,8 @@ class JSONSchemaToPostgres:
 
         res['_table'] = table
         res['_suffix'] = '/'.join(path)
-        res['_json_path'] = '.'.join(json_path)
-        self.json_path_count['.'.join(json_path)] = 0
+        res['_json_path'] = '/'.join(json_path)
+        self.json_path_count['/'.join(json_path)] = 0
 
         return res
 
