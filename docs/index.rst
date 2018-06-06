@@ -1,3 +1,8 @@
+JSON Schema ➣ Database
+======================
+
+A simple utility to convert JSON Schemas into relational tables in Postgres.
+
 Example
 =======
 
