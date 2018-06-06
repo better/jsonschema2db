@@ -6,6 +6,17 @@ import warnings
 
 
 class JSONSchemaToPostgres:
+    '''JSONSchemaToPostgres is the mother class for everything
+
+    :param schema: The JSON schema, as a native Python dict
+    :param postgres_schema: (optional) A string denoting a postgres schema (namespace) under which all tables will be created
+    :param item_col_name: (optional) The name of the main object key (default is 'item_id')
+    :param item_col_type: (optional) Type of the main object key (uses the type identifiers from JSON Schema). Default is 'integer'
+    :param prefix_col_name: (optional) Postgres column name identifying the subpaths in the object (default is 'prefix')
+    :param abbreviations: (optional) A string to string mapping containing replacements applied to each part of the path
+
+    Typically you want to instantiate a `JSONSchemaToPostgres` object, and run :func:`create_tables` to create all the tables. After that, insert all data using :func:`insert_items`. Once you're done inserting, run :func:`create_links` to populate all references properly and add foreign keys between tables. Optionally you can run :func:`analyze` finally which optimizes the tables.
+    '''
     def __init__(self, schema, postgres_schema=None, item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix', abbreviations={}):
         self._table_definitions = {}
         self._links = {}
@@ -185,6 +196,10 @@ class JSONSchemaToPostgres:
             return '"%s"."%s"' % (self._postgres_schema, table)
 
     def create_tables(self, con):
+        '''Creates tables
+
+        :param con: psycopg2 connection object
+        '''
         postgres_types = {'boolean': 'bool', 'number': 'float', 'string': 'text', 'enum': 'text', 'integer': 'bigint', 'timestamp': 'timestamptz', 'date': 'date', 'link': 'integer'}
         with con.cursor() as cursor:
             if self._postgres_schema is not None:
@@ -207,13 +222,15 @@ class JSONSchemaToPostgres:
     def insert_items(self, con, items, mutate=True):
         ''' Inserts data into database.
 
-        `items` is a dict where they keys are item ids and each value is an item either:
+        :param con: psycopg2 connection object
+        :param items: is a dict where they keys are item ids and each value is an item either:
+
         - A nested dict conforming to the JSON spec
         - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
 
-        If `mutate` is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
+        :param mutate: If this is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
 
-        Updates self.failure_count, a dict counting the number of failures for paths (keys are tuples, values are integers).
+        Updates `self.failure_count`, a dict counting the number of failures for paths (keys are tuples, values are integers).
         '''
         res = {}
         for item_id, data in items.items():
