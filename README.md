@@ -9,6 +9,14 @@ For instance, Better uses it to generate 50+ tables automatically, with millions
 
 Only Postgres is supported at the moment, although it should be fairly simple to add other databases.
 
+Installation
+---
+
+The easiest way to install this is (probably) to run `pip install -e git://github.com/better/jsonschema2db#egg=jsonschema2db`
+
+Documentation
+---
+
 See [full documentation](https://better.engineering/jsonschema2db/) for more info about how to use jsonschema2db!
 
 Other
