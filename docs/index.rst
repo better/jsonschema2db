@@ -3,6 +3,8 @@ JSON Schema ➣ Database
 
 A simple utility to convert JSON Schemas into relational tables in Postgres.
 
+Also see the `Github page <https://github.com/better/jsonschema2db>`_ for source code and discussion!
+
 Installation
 ============
 
