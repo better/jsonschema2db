@@ -291,7 +291,7 @@ class JSONSchemaToPostgres:
                     cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
 
     def create_links(self, con):
-        # Add foreign keys between tables
+        '''Adds foreign keys between tables.'''
         for from_table, cols in self._links.items():
             for ref_col_name, (prefix, to_table) in cols.items():
                 if from_table not in self._table_columns or to_table not in self._table_columns:
@@ -314,6 +314,10 @@ class JSONSchemaToPostgres:
                     cursor.execute(alter_q)
 
     def analyze(self, con):
+        '''Runs `analyze` on each table. This improves performance.
+
+        See the `Postgres documentation for Analyze <https://www.postgresql.org/docs/9.1/static/sql-analyze.html>`_
+        '''
         with con.cursor() as cursor:
             for table in self._table_columns.keys():
                 cursor.execute('analyze %s' % self._postgres_table_name(table))

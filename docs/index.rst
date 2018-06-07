@@ -3,8 +3,18 @@ JSON Schema ➣ Database
 
 A simple utility to convert JSON Schemas into relational tables in Postgres.
 
-Example
-=======
+Installation
+============
+
+The easiest way to install this is (probably) to run
+
+::
+
+    pip install -e git://github.com/better/jsonschema2db#egg=jsonschema2db
+
+
+Quick overview
+==============
 
 Let's say you have this schema: `test_schema.json <https://github.com/better/jsonschema2db/blob/master/test/test_schema.json>`_. Basically:
 
@@ -60,31 +70,52 @@ The rule for when to create a separate table is that either:
 1. It's a shared definition that is an object (with links from the parent to the child)
 2. Any object with `patternProperties` will have its children in a separate table (with links back to the parent, if the link is unique)
 
+Creating tables
+---------------
+
+The first step is to instantiate a :class:`jsonschema2db.JSONSchemaToPostgres` object and create the tables using :func:`jsonschema2db.JSONSchemaToPostgres.create_tables`:
+
+.. code-block:: python
+
+    schema = json.load(open('test/test_schema.json'))
+    translator = JSONSchemaToPostgres(
+        schema,
+        postgres_schema='schm',
+        item_col_name='loan_file_id',
+        item_col_type='string',
+        abbreviations={
+            'AbbreviateThisReallyLongColumn': 'AbbTRLC',
+        }
+    )
+
+    con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    translator.create_tables(con)
+
 Inserting data
 --------------
 
-Let's say we have the following object with key `1000000000`:
+Now, let's insert some data into the tables:
 
-.. code-block:: json
+.. code-block:: python
 
-    {1000000000: {'Loan': {'Amount': 500000},
-                  'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn',
-                                                        'ZipCode': '65432'},
-                                            'RentalIncome': 1000}},
-                  'SubjectProperty': {'Acreage': 42,
-                                      'Address': {'City': 'New York',
-                                                  'Latitude': 43,
-                                                  'ZipCode': '12345'}}}}
+    translator.insert_items(con, {
+        'loan_file_abc123': {
+            'Loan': {'Amount': 500000},
+            'SubjectProperty': {'Address': {'City': 'New York', 'ZipCode': '12345', 'Latitude': 43}, 'Acreage': 42},
+            'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn', 'ZipCode': '65432'}, 'RentalIncome': 1000},
+                                '2': {'Address': {'City': 'Queens', 'ZipCode': '54321'}}},
+        }
+    })
 
 
-If we insert this into the database using :class:`jsonschema2db.JSONSchemaToPostgres`, it will create the following rows:
+This will create the following rows:
 
 ::
 
     jsonschema2db-test=# select * from schm.root;
     -[ RECORD 1 ]------------------------+-----------
     id                                   | 1
-    loan_file_id                         | 1000000000
+    loan_file_id                         | loan_file_abc123
     prefix                               |
     loan__amount                         | 500000
     subject_property__acreage            | 42
@@ -120,6 +151,12 @@ If we insert this into the database using :class:`jsonschema2db.JSONSchemaToPost
     address_id    | 2
     rental_income | 1000
     root_id       | 1
+
+
+Post-insertion
+--------------
+
+After you're done inserting, you generally want to run :func:`jsonschema2db.JSONSchemaToPostgres.create_links` and :func:`jsonschema2db.JSONSchemaToPostgres.analyze`. This will add foreign keys and also analyze the table for better performance.
 
 
 Full API documentation
