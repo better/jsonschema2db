@@ -1,23 +1,38 @@
 import change_case
-import datetime
+import csv
+import gzip
 import iso8601
 import json
+import random
+import sys
+import tempfile
 import warnings
 
 
-class JSONSchemaToPostgres:
-    '''JSONSchemaToPostgres is the mother class for everything
+class JSONSchemaToDatabase:
+    '''JSONSchemaToDatabase is the mother class for everything
 
     :param schema: The JSON schema, as a native Python dict
+    :param database_flavor: Either "postgres" or "redshift"
     :param postgres_schema: (optional) A string denoting a postgres schema (namespace) under which all tables will be created
+    :param debug: (optional) Set this to True if you want all queries to be printed to stderr
     :param item_col_name: (optional) The name of the main object key (default is 'item_id')
     :param item_col_type: (optional) Type of the main object key (uses the type identifiers from JSON Schema). Default is 'integer'
     :param prefix_col_name: (optional) Postgres column name identifying the subpaths in the object (default is 'prefix')
     :param abbreviations: (optional) A string to string mapping containing replacements applied to each part of the path
+    :param s3_client: (optional, Redshift only) A boto3 client object used for copying data through S3 (if not provided then it will use INSERT statements, which can be very slow)
+    :param s3_bucket: (optional, Redshift only) Required with s3_client
+    :param s3_prefix: (optional, Redshift only) Optional subdirectory within the S3 bucket
+    :param s3_iam_arn: (optional, Redshift only) Extra IAM argument
 
     Typically you want to instantiate a `JSONSchemaToPostgres` object, and run :func:`create_tables` to create all the tables. After that, insert all data using :func:`insert_items`. Once you're done inserting, run :func:`create_links` to populate all references properly and add foreign keys between tables. Optionally you can run :func:`analyze` finally which optimizes the tables.
     '''
-    def __init__(self, schema, postgres_schema=None, item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix', abbreviations={}):
+    def __init__(self, schema, database_flavor, postgres_schema=None, debug=False,
+                 item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix',
+                 abbreviations={},
+                 s3_client=None, s3_bucket=None, s3_prefix='jsonschema2db', s3_iam_arn=None):
+        self._database_flavor = database_flavor
+        self._debug = debug
         self._table_definitions = {}
         self._links = {}
         self._backlinks = {}
@@ -28,6 +43,12 @@ class JSONSchemaToPostgres:
         self._abbreviations = abbreviations
         self._table_comments = {}
         self._column_comments = {}
+
+        # Redshift-specific properties
+        self._s3_client = s3_client
+        self._s3_bucket = s3_bucket
+        self._s3_prefix = s3_prefix
+        self._s3_iam_arn = s3_iam_arn
 
         # Various counters used for diagnostics during insertions
         self.failure_count = {}  # path -> count
@@ -48,11 +69,12 @@ class JSONSchemaToPostgres:
 
         # Construct tables and columns
         self._table_columns = {}
+        max_column_length = {'postgres': 63, 'redshift': 127}[self._database_flavor]
         for table, column_types in self._table_definitions.items():
             for column in column_types.keys():
-                if len(column) >= 64:
+                if len(column) > max_column_length:
                     warnings.warn('Ignoring_column because it is too long: %s.%s' % (table, column))
-            columns = sorted(col for col in column_types.keys() if 0 < len(col) < 64)
+            columns = sorted(col for col in column_types.keys() if 0 < len(col) <= max_column_length)
             self._table_columns[table] = columns
 
     def _table_name(self, path):
@@ -60,6 +82,11 @@ class JSONSchemaToPostgres:
 
     def _column_name(self, path):
         return self._table_name(path)  # same
+
+    def _execute(self, cursor, query, args=tuple()):
+        if self._debug:
+            print(query % args, file=sys.stderr)
+        cursor.execute(query, args)
 
     def _traverse(self, schema, tree, path=tuple(), table='root', parent=None, comment=None, json_path=tuple()):
         # Computes a bunch of stuff
@@ -203,21 +230,22 @@ class JSONSchemaToPostgres:
         postgres_types = {'boolean': 'bool', 'number': 'float', 'string': 'text', 'enum': 'text', 'integer': 'bigint', 'timestamp': 'timestamptz', 'date': 'date', 'link': 'integer'}
         with con.cursor() as cursor:
             if self._postgres_schema is not None:
-                cursor.execute('drop schema if exists %s cascade' % self._postgres_schema)
-                cursor.execute('create schema %s' % self._postgres_schema)
+                self._execute(cursor, 'drop schema if exists %s cascade' % self._postgres_schema)
+                self._execute(cursor, 'create schema %s' % self._postgres_schema)
             for table, columns in self._table_columns.items():
                 types = [self._table_definitions[table][column] for column in columns]
-                create_q = 'create table %s (id serial primary key, "%s" %s not null, "%s" text not null, %s unique ("%s", "%s"))' % \
-                           (self._postgres_table_name(table), self._item_col_name, postgres_types[self._item_col_type], self._prefix_col_name,
+                id_data_type = {'postgres': 'serial', 'redshift': 'int identity(1, 1) not null'}[self._database_flavor]
+
+                create_q = 'create table %s (id %s, "%s" %s not null, "%s" text not null, %s unique ("%s", "%s"), unique (id))' % \
+                           (self._postgres_table_name(table), id_data_type, self._item_col_name, postgres_types[self._item_col_type], self._prefix_col_name,
                             ''.join('"%s" %s, ' % (c, postgres_types[t]) for c, t in zip(columns, types)),
                             self._item_col_name, self._prefix_col_name)
-                cursor.execute(create_q)
-                cursor.execute('create index on %s ("%s")' % (self._postgres_table_name(table), self._item_col_name))
+                self._execute(cursor, create_q)
                 if table in self._table_comments:
-                    cursor.execute('comment on table %s is %%s' % self._postgres_table_name(table), (self._table_comments[table],))
+                    self._execute(cursor, 'comment on table %s is %%s' % self._postgres_table_name(table), (self._table_comments[table],))
                 for c in columns:
                     if c in self._column_comments.get(table, {}):
-                        cursor.execute('comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
+                        self._execute(cursor, 'comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
     def insert_items(self, con, items, mutate=True):
         ''' Inserts data into database.
@@ -232,16 +260,17 @@ class JSONSchemaToPostgres:
 
         Updates `self.failure_count`, a dict counting the number of failures for paths (keys are tuples, values are integers).
         '''
-        res = {}
+        data_by_table = {}
         for item_id, data in items.items():
             if type(data) == dict:
                 data = self._flatten_dict(data)
+            res = {}
             for path, value in data:
                 if value is None:
                     continue
 
                 subtree = self._translation_tree
-                res.setdefault(item_id, {}).setdefault(subtree['_table'], {}).setdefault('', {})
+                res.setdefault(subtree['_table'], {}).setdefault('', {})
                 self.json_path_count[subtree['_json_path']] += 1
 
                 for index, path_part in enumerate(path):
@@ -258,7 +287,7 @@ class JSONSchemaToPostgres:
                     prefix_suffix = '/' + '/'.join(path[:(index+1)])
                     assert prefix_suffix.endswith(suffix)
                     prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
-                    res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})
+                    res.setdefault(table, {}).setdefault(prefix, {})
                     self.json_path_count[subtree['_json_path']] += 1
 
                 # Leaf node with value, validate and prepare for insertion
@@ -273,22 +302,42 @@ class JSONSchemaToPostgres:
                     self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
 
-                res.setdefault(item_id, {}).setdefault(table, {}).setdefault(prefix, {})[col] = value
+                res.setdefault(table, {}).setdefault(prefix, {})[col] = value
 
-        data_by_table = {}
-        for item_id, item_data in res.items():
-            for table, table_values in item_data.items():
+            # Compile table rows for this item
+            for table, table_values in res.items():
                 for prefix, row_values in table_values.items():
                     row_array = [item_id, prefix] + [row_values.get(t) for t in self._table_columns[table]]
                     data_by_table.setdefault(table, []).append(row_array)
 
         if mutate:
-            with con.cursor() as cursor:
+            if self._database_flavor == 'redshift' and self._s3_client:
+                batch_random = '%012d' % random.randint(0, 999999999999)
                 for table, data in data_by_table.items():
-                    cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
-                    pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
-                    args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
-                    cursor.execute(b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
+                    with tempfile.NamedTemporaryFile(suffix='.csv.gz') as t, con.cursor() as cursor:
+                        # First, dump the data to a temporary file
+                        f = gzip.open(t.name, 'wt')
+                        writer = csv.writer(f)
+                        for row in data:
+                            writer.writerow(row)
+                        f.close()
+
+                        # Then, upload the file to S3
+                        s3_path = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
+                        self._s3_client.upload_file(Filename=t.name, Bucket=self._s3_bucket, Key=s3_path)
+
+                        # Finally, load it into Redshift
+                        query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns gzip compupdate off statupdate off' % (
+                            self._postgres_table_name(table),
+                            self._s3_bucket, s3_path, self._s3_iam_arn and 'iam_role \'%s\'' % self._s3_iam_arn or '')
+                        self._execute(cursor, query)
+            else:
+                with con.cursor() as cursor:
+                    for table, data in data_by_table.items():
+                        cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
+                        pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
+                        args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
+                        self._execute(cursor, b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
 
     def create_links(self, con):
         '''Adds foreign keys between tables.'''
@@ -296,22 +345,26 @@ class JSONSchemaToPostgres:
             for ref_col_name, (prefix, to_table) in cols.items():
                 if from_table not in self._table_columns or to_table not in self._table_columns:
                     continue
-                update_q = 'update %s as from_table set "%s" = to_table.id from (select "%s", "%s", id from %s) to_table' \
-                           % (self._postgres_table_name(from_table), ref_col_name, self._item_col_name, self._prefix_col_name, self._postgres_table_name(to_table))
+                args = {
+                    'from_table': self._postgres_table_name(from_table),
+                    'to_table': self._postgres_table_name(to_table),
+                    'ref_col': ref_col_name,
+                    'item_col': self._item_col_name,
+                    'prefix_col': self._prefix_col_name,
+                    'prefix': prefix,
+                    }
+                update_q = 'update %(from_table)s set "%(ref_col)s" = to_table.id from (select "%(item_col)s", "%(prefix_col)s", id from %(to_table)s) to_table' % args
                 if prefix:
                     # Forward reference from table to a definition
-                    update_q += ' where from_table."%s" = to_table."%s" and from_table."%s" || \'/%s\' = to_table."%s"' % (
-                        self._item_col_name, self._item_col_name, self._prefix_col_name, prefix, self._prefix_col_name)
+                    update_q += ' where %(from_table)s."%(item_col)s" = to_table."%(item_col)s" and %(from_table)s."%(prefix_col)s" || \'/%(prefix)s\' = to_table."%(prefix_col)s"' % args
                 else:
                     # Backward definition from a table to its patternProperty parent
-                    update_q += ' where from_table."%s" = to_table."%s" and strpos(from_table."%s", to_table."%s") = 1' % (
-                        self._item_col_name, self._item_col_name, self._prefix_col_name, self._prefix_col_name)
+                    update_q += ' where %(from_table)s."%(item_col)s" = to_table."%(item_col)s" and strpos(%(from_table)s."%(prefix_col)s", to_table."%(prefix_col)s") = 1' % args
 
-                alter_q = 'alter table %s add constraint fk_%s foreign key ("%s") references %s (id)' % \
-                          (self._postgres_table_name(from_table), ref_col_name, ref_col_name, self._postgres_table_name(to_table))
+                alter_q = 'alter table %(from_table)s add constraint fk_%(ref_col)s foreign key ("%(ref_col)s") references %(to_table)s (id)' % args
                 with con.cursor() as cursor:
-                    cursor.execute(update_q)
-                    cursor.execute(alter_q)
+                    self._execute(cursor, update_q)
+                    self._execute(cursor, alter_q)
 
     def analyze(self, con):
         '''Runs `analyze` on each table. This improves performance.
@@ -320,4 +373,18 @@ class JSONSchemaToPostgres:
         '''
         with con.cursor() as cursor:
             for table in self._table_columns.keys():
-                cursor.execute('analyze %s' % self._postgres_table_name(table))
+                self._execute(cursor, 'analyze %s' % self._postgres_table_name(table))
+
+
+class JSONSchemaToPostgres(JSONSchemaToDatabase):
+    def __init__(self, *args, **kwargs):
+        '''Shorthand for JSONSchemaToDatabase(..., database_flavor='postgres')'''
+        kwargs['database_flavor'] = 'postgres'
+        return super(JSONSchemaToPostgres, self).__init__(*args, **kwargs)
+
+
+class JSONSchemaToRedshift(JSONSchemaToDatabase):
+    def __init__(self, *args, **kwargs):
+        '''Shorthand for JSONSchemaToDatabase(..., database_flavor='redshift')'''
+        kwargs['database_flavor'] = 'redshift'
+        return super(JSONSchemaToRedshift, self).__init__(*args, **kwargs)
