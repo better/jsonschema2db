@@ -85,7 +85,7 @@ class JSONSchemaToDatabase:
 
     def _execute(self, cursor, query, args=tuple()):
         if self._debug:
-            print(query % args, file=sys.stderr)
+            print(query, file=sys.stderr)
         cursor.execute(query, args)
 
     def _traverse(self, schema, tree, path=tuple(), table='root', parent=None, comment=None, json_path=tuple()):
