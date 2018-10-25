@@ -7,7 +7,7 @@ We use [JSON Schema](http://json-schema.org/) pretty extensively at [Better](htt
 
 For instance, Better uses it to generate 50+ tables automatically, with millions of rows, from a very complex JSON schema that is 7000+ lines long.
 
-Only Postgres is supported at the moment, although it should be fairly simple to add other databases.
+Postgres and Redshift are supported, although the latter is somewhat experimental still.
 
 Installation
 ---

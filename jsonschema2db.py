@@ -377,14 +377,14 @@ class JSONSchemaToDatabase:
 
 
 class JSONSchemaToPostgres(JSONSchemaToDatabase):
+    '''Shorthand for JSONSchemaToDatabase(..., database_flavor='postgres')'''
     def __init__(self, *args, **kwargs):
-        '''Shorthand for JSONSchemaToDatabase(..., database_flavor='postgres')'''
         kwargs['database_flavor'] = 'postgres'
         return super(JSONSchemaToPostgres, self).__init__(*args, **kwargs)
 
 
 class JSONSchemaToRedshift(JSONSchemaToDatabase):
+    '''Shorthand for JSONSchemaToDatabase(..., database_flavor='redshift')'''
     def __init__(self, *args, **kwargs):
-        '''Shorthand for JSONSchemaToDatabase(..., database_flavor='redshift')'''
         kwargs['database_flavor'] = 'redshift'
         return super(JSONSchemaToRedshift, self).__init__(*args, **kwargs)
