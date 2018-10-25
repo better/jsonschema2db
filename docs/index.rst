@@ -1,7 +1,7 @@
 JSON Schema ➣ Database
 ======================
 
-A simple utility to convert JSON Schemas into relational tables in Postgres.
+A simple utility to convert JSON Schemas into relational tables in Postgres/Redshift.
 
 Also see the `Github page <https://github.com/better/jsonschema2db>`_ for source code and discussion!
 
@@ -18,7 +18,11 @@ The easiest way to install this is (probably) to run
 Quick overview
 ==============
 
-Let's say you have this schema: `test_schema.json <https://github.com/better/jsonschema2db/blob/master/test/test_schema.json>`_. Basically:
+Let's say you have the JSON schema `test_schema.json <https://github.com/better/jsonschema2db/blob/master/test/test_schema.json>`_:
+
+.. literalinclude:: ../test/test_schema.json
+
+This looks a bit complex, but basically:
 
 1. There's a shared definition for an `basicAddress` definition that has the normal address fields: state, zip, etc
 2. There's a definition `address` that extends `basicAddress` and adds latitude and longitude
@@ -63,7 +67,7 @@ jsonschema2db creates the following tables automatically:
     )
 
 
-As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types. jsonschema2db also converts camel case into snake case since that's the Postgres convention. Unfortunately, Postgres limits column names to 63 characters. If you have longer column names, provide a list of abbreviations using the `abbreviations` parameter to the constructor.
+As you can see, we end up with three tables, each containing a flat structure of scalar values, with correct types. jsonschema2db also converts camel case into snake case since that's the Postgres convention. Unfortunately, Postgres limits column names to 63 characters (127 in Redshift). If you have longer column names, provide a list of abbreviations using the `abbreviations` parameter to the constructor.
 
 jsonschema2db also handles inserts into these tables by transforming them into a flattened form. On top of that, a number of foreign keys will be created and links between the tables.
 
@@ -75,7 +79,7 @@ The rule for when to create a separate table is that either:
 Creating tables
 ---------------
 
-The first step is to instantiate a :class:`jsonschema2db.JSONSchemaToPostgres` object and create the tables using :func:`jsonschema2db.JSONSchemaToPostgres.create_tables`:
+The first step is to instantiate a :class:`jsonschema2db.JSONSchemaToPostgres` object (or the corresponding :class:`jsonschema2db.JSONSchemaToRedshift` and create the tables using :func:`jsonschema2db.JSONSchemaToPostgres.create_tables`:
 
 .. code-block:: python
 
@@ -164,5 +168,9 @@ After you're done inserting, you generally want to run :func:`jsonschema2db.JSON
 Full API documentation
 ======================
 
-.. autoclass:: jsonschema2db.JSONSchemaToPostgres
+.. autoclass:: jsonschema2db.JSONSchemaToDatabase
    :members:
+
+.. autoclass:: jsonschema2db.JSONSchemaToPostgres
+
+.. autoclass:: jsonschema2db.JSONSchemaToRedshift

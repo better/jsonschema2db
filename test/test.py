@@ -19,7 +19,8 @@ def test_lff():
         item_col_type='string',
         abbreviations={
             'AbbreviateThisReallyLongColumn': 'AbbTRLC',
-        }
+        },
+        debug=True,
     )
 
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
@@ -54,7 +55,7 @@ def test_lff():
 
 def test_pp_to_def():
     schema = json.load(open('test/test_pp_to_def.json'))
-    translator = JSONSchemaToPostgres(schema)
+    translator = JSONSchemaToPostgres(schema, debug=True)
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
     translator.insert_items(con, {33: [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
@@ -81,7 +82,7 @@ def test_pp_to_def():
 
 def test_comments():
     schema = json.load(open('test/test_pp_to_def.json'))
-    translator = JSONSchemaToPostgres(schema)
+    translator = JSONSchemaToPostgres(schema, debug=True)
 
     # A bit ugly to look at private members, but pulling comments out of postgres is a pain
     assert translator._table_comments == {'root': 'the root of everything',
