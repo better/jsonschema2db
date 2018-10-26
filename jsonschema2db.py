@@ -83,8 +83,8 @@ class JSONSchemaToDatabase:
     def _column_name(self, path):
         return self._table_name(path)  # same
 
-    def _execute(self, cursor, query, args=tuple()):
-        if self._debug:
+    def _execute(self, cursor, query, args=None, query_ok_to_print=True):
+        if self._debug and query_ok_to_print:
             print(query, file=sys.stderr)
         cursor.execute(query, args)
 
@@ -337,7 +337,7 @@ class JSONSchemaToDatabase:
                         cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
                         pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
                         args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
-                        self._execute(cursor, b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args))
+                        self._execute(cursor, b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args), query_ok_to_print=False)
 
     def create_links(self, con):
         '''Adds foreign keys between tables.'''
