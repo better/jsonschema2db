@@ -247,21 +247,9 @@ class JSONSchemaToDatabase:
                     if c in self._column_comments.get(table, {}):
                         self._execute(cursor, 'comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
-    def insert_items(self, con, items, mutate=True):
-        ''' Inserts data into database.
-
-        :param con: psycopg2 connection object
-        :param items: is a dict where they keys are item ids and each value is an item either:
-
-        - A nested dict conforming to the JSON spec
-        - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
-
-        :param mutate: If this is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
-
-        Updates `self.failure_count`, a dict counting the number of failures for paths (keys are tuples, values are integers).
-        '''
-        data_by_table = {}
-        for item_id, data in items.items():
+    def _insert_items_generate_rows(self, items):
+        # Helper function to generate data row by row for insertion
+        for item_id, data in items:
             if type(data) == dict:
                 data = self._flatten_dict(data)
             res = {}
@@ -308,36 +296,82 @@ class JSONSchemaToDatabase:
             for table, table_values in res.items():
                 for prefix, row_values in table_values.items():
                     row_array = [item_id, prefix] + [row_values.get(t) for t in self._table_columns[table]]
-                    data_by_table.setdefault(table, []).append(row_array)
+                    yield (table, row_array)
 
-        if mutate:
-            if self._database_flavor == 'redshift' and self._s3_client:
-                batch_random = '%012d' % random.randint(0, 999999999999)
+    def insert_items(self, con, items, mutate=True):
+        ''' Inserts data into database.
+
+        :param con: psycopg2 connection object
+        :param items: is an iterable of tuples `(item id, values)` where `values` is either:
+
+        - A nested dict conforming to the JSON spec
+        - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
+
+        :param mutate: If this is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
+
+        Updates `self.failure_count`, a dict counting the number of failures for paths (keys are tuples, values are integers).
+
+        This function has an optimized strategy for Redshift, where it writes the data to temporary files, copies those to S3, and uses the `COPY`
+        command to ingest the data into Redshift. However this strategy is only used if the `s3_client` is provided to the constructor.
+        Otherwise, it will fall back to the Postgres-based method of running batched insertions.
+
+        Note that the Postgres-based insertion builds up huge intermediary datastructures, so it will take a lot more memory.
+        '''
+        rows = self._insert_items_generate_rows(items=items)
+
+        if not mutate:
+            for table, row in rows:
+                # Just exhaust the iterator
+                pass
+
+        elif self._database_flavor == 'redshift' and self._s3_client:
+            # Flush the iterator to temporary files on disk
+            temp_files, writers, gzip_objs = {}, {}, []
+            for table, row in rows:
+                if table not in temp_files:
+                    t = tempfile.NamedTemporaryFile(suffix='.csv.gz')
+                    f = gzip.open(t.name, 'wt')
+                    writer = csv.writer(f)
+                    if self._debug:
+                        print('creating temp file for table', table, 'at', t.name)
+                    temp_files[table] = t
+                    writers[table] = writer
+                    gzip_objs.append(f)
+
+                writers[table].writerow(row)
+
+            # Close local temp files so all data gets flushed to disk
+            for f in gzip_objs:
+                f.close()
+
+            # Upload all files to S3
+            s3_paths = {}
+            batch_random = '%012d' % random.randint(0, 999999999999)
+            for table, t in temp_files.items():
+                s3_paths[table] = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
+                if self._debug:
+                    print('uploading data for table', table, 'to', s3_paths[table])
+                self._s3_client.upload_file(Filename=t.name, Bucket=self._s3_bucket, Key=s3_paths[table])
+
+            # Finally, load it into Redshift
+            with con.cursor() as cursor:
+                for table, s3_path in s3_paths.items():
+                    query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns gzip compupdate off statupdate off' % (
+                        self._postgres_table_name(table),
+                        self._s3_bucket, s3_path, self._s3_iam_arn and 'iam_role \'%s\'' % self._s3_iam_arn or '')
+                    self._execute(cursor, query)
+        else:
+            # Postgres-based insertion
+            with con.cursor() as cursor:
+                data_by_table = {}
+                for table, row in rows:
+                    # Note that this flushes the iterator into an in-memory datastructure, so it will be far less memory efficient than the Redshift strategy
+                    data_by_table.setdefault(table, []).append(row)
                 for table, data in data_by_table.items():
-                    with tempfile.NamedTemporaryFile(suffix='.csv.gz') as t, con.cursor() as cursor:
-                        # First, dump the data to a temporary file
-                        f = gzip.open(t.name, 'wt')
-                        writer = csv.writer(f)
-                        for row in data:
-                            writer.writerow(row)
-                        f.close()
-
-                        # Then, upload the file to S3
-                        s3_path = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
-                        self._s3_client.upload_file(Filename=t.name, Bucket=self._s3_bucket, Key=s3_path)
-
-                        # Finally, load it into Redshift
-                        query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns gzip compupdate off statupdate off' % (
-                            self._postgres_table_name(table),
-                            self._s3_bucket, s3_path, self._s3_iam_arn and 'iam_role \'%s\'' % self._s3_iam_arn or '')
-                        self._execute(cursor, query)
-            else:
-                with con.cursor() as cursor:
-                    for table, data in data_by_table.items():
-                        cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
-                        pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
-                        args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
-                        self._execute(cursor, b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args), query_ok_to_print=False)
+                    cols = '("%s","%s"%s)' % (self._item_col_name, self._prefix_col_name, ''.join(',"%s"' % c for c in self._table_columns[table]))
+                    pattern = '(' + ','.join(['%s'] * len(data[0])) + ')'
+                    args = b','.join(cursor.mogrify(pattern, tup) for tup in data)
+                    self._execute(cursor, b'insert into %s %s values %s' % (self._postgres_table_name(table).encode(), cols.encode(), args), query_ok_to_print=False)
 
     def create_links(self, con):
         '''Adds foreign keys between tables.'''
