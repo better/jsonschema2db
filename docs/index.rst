@@ -104,14 +104,14 @@ Now, let's insert some data into the tables:
 
 .. code-block:: python
 
-    translator.insert_items(con, {
-        'loan_file_abc123': {
+    translator.insert_items(con, [
+        ('loan_file_abc123', {
             'Loan': {'Amount': 500000},
             'SubjectProperty': {'Address': {'City': 'New York', 'ZipCode': '12345', 'Latitude': 43}, 'Acreage': 42},
             'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn', 'ZipCode': '65432'}, 'RentalIncome': 1000},
                                 '2': {'Address': {'City': 'Queens', 'ZipCode': '54321'}}},
-        }
-    })
+        })
+    ])
 
 
 This will create the following rows:

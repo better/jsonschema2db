@@ -25,14 +25,14 @@ def test_lff():
 
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
-    translator.insert_items(con, {
-        'loan_file_abc123': {
+    translator.insert_items(con, [
+        ('loan_file_abc123', {
             'Loan': {'Amount': 500000},
             'SubjectProperty': {'Address': {'City': 'New York', 'ZipCode': '12345', 'Latitude': 43}, 'Acreage': 42},
             'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn', 'ZipCode': '65432'}, 'RentalIncome': 1000},
                                 '2': {'Address': {'City': 'Queens', 'ZipCode': '54321'}}},
-        }
-    })
+        })
+    ])
     translator.create_links(con)
     translator.analyze(con)
 
@@ -58,10 +58,10 @@ def test_pp_to_def():
     translator = JSONSchemaToPostgres(schema, debug=True)
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
-    translator.insert_items(con, {33: [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
-                                       (('moreDocuments', 'abc', 'url'), 'https://banana'),
-                                       (('moreDocuments', 'abc', 'url'), ['wrong-type']),
-                                       (('moreDocuments', 'abc'), 'broken-value-ignore')]})
+    translator.insert_items(con, [(33, [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
+                                        (('moreDocuments', 'abc', 'url'), 'https://banana'),
+                                        (('moreDocuments', 'abc', 'url'), ['wrong-type']),
+                                        (('moreDocuments', 'abc'), 'broken-value-ignore')])])
     translator.create_links(con)
     translator.analyze(con)
 
