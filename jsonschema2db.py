@@ -3,6 +3,7 @@ import csv
 import gzip
 import iso8601
 import json
+import os
 import random
 import sys
 import tempfile
@@ -325,37 +326,34 @@ class JSONSchemaToDatabase:
                 pass
 
         elif self._database_flavor == 'redshift' and self._s3_client:
-            # Flush the iterator to temporary files on disk
-            temp_files, writers, gzip_objs = {}, {}, []
-            for table, row in rows:
-                if table not in temp_files:
-                    t = tempfile.NamedTemporaryFile(suffix='.csv.gz')
-                    f = gzip.open(t.name, 'wt')
-                    writer = csv.writer(f)
+            with tempfile.TemporaryDirectory() as tmpdirname, con.cursor() as cursor:
+                # Flush the iterator to temporary files on disk
+                temp_files, writers, gzip_objs = {}, {}, []
+                for table, row in rows:
+                    if table not in temp_files:
+                        fn = temp_files[table] = os.path.join(tmpdirname, table + '.csv.gz')
+                        f = gzip.open(fn, 'wt')
+                        writer = csv.writer(f)
+                        if self._debug:
+                            print('Creating temp file for table', table, 'at', fn)
+                        writers[table] = writer
+                        gzip_objs.append(f)
+
+                    writers[table].writerow(row)
+
+                # Close local temp files so all data gets flushed to disk
+                for f in gzip_objs:
+                    f.close()
+
+                # Upload all files to S3 and load into Redshift
+                # TODO: might want to use a thread pool for this
+                batch_random = '%012d' % random.randint(0, 999999999999)
+                for table, fn in temp_files.items():
+                    s3_path = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
                     if self._debug:
-                        print('creating temp file for table', table, 'at', t.name)
-                    temp_files[table] = t
-                    writers[table] = writer
-                    gzip_objs.append(f)
+                        print('Uploading data for table %s from %s (%d bytes) to %s' % (table, fn, os.path.getsize(fn), s3_path))
+                    self._s3_client.upload_file(Filename=fn, Bucket=self._s3_bucket, Key=s3_path)
 
-                writers[table].writerow(row)
-
-            # Close local temp files so all data gets flushed to disk
-            for f in gzip_objs:
-                f.close()
-
-            # Upload all files to S3
-            s3_paths = {}
-            batch_random = '%012d' % random.randint(0, 999999999999)
-            for table, t in temp_files.items():
-                s3_paths[table] = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
-                if self._debug:
-                    print('uploading data for table', table, 'to', s3_paths[table])
-                self._s3_client.upload_file(Filename=t.name, Bucket=self._s3_bucket, Key=s3_paths[table])
-
-            # Finally, load it into Redshift
-            with con.cursor() as cursor:
-                for table, s3_path in s3_paths.items():
                     query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns gzip compupdate off statupdate off' % (
                         self._postgres_table_name(table),
                         self._s3_bucket, s3_path, self._s3_iam_arn and 'iam_role \'%s\'' % self._s3_iam_arn or '')
