@@ -58,10 +58,12 @@ def test_pp_to_def():
     translator = JSONSchemaToPostgres(schema, debug=True)
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
-    translator.insert_items(con, [(33, [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
-                                        (('moreDocuments', 'abc', 'url'), 'https://banana'),
-                                        (('moreDocuments', 'abc', 'url'), ['wrong-type']),
-                                        (('moreDocuments', 'abc'), 'broken-value-ignore')])])
+    translator.insert_items(con,
+                            [(33, [(('aBunchOfDocuments', 'xyz', 'url'), 'http://baz.bar'),
+                                   (('moreDocuments', 'abc', 'url'), 'https://banana'),
+                                   (('moreDocuments', 'abc', 'url'), ['wrong-type']),
+                                   (('moreDocuments', 'abc'), 'broken-value-ignore')])],
+                            count=True)
     translator.create_links(con)
     translator.analyze(con)
 

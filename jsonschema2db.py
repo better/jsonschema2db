@@ -1,6 +1,5 @@
 import change_case
 import csv
-import gzip
 import iso8601
 import json
 import os
@@ -248,7 +247,7 @@ class JSONSchemaToDatabase:
                     if c in self._column_comments.get(table, {}):
                         self._execute(cursor, 'comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
-    def _insert_items_generate_rows(self, items):
+    def _insert_items_generate_rows(self, items, count):
         # Helper function to generate data row by row for insertion
         for item_id, data in items:
             if type(data) == dict:
@@ -260,13 +259,15 @@ class JSONSchemaToDatabase:
 
                 subtree = self._translation_tree
                 res.setdefault(subtree['_table'], {}).setdefault('', {})
-                self.json_path_count[subtree['_json_path']] += 1
+                if count:
+                    self.json_path_count[subtree['_json_path']] += 1
 
                 for index, path_part in enumerate(path):
                     if '*' in subtree:
                         subtree = subtree['*']
                     elif not subtree.get(path_part):
-                        self.failure_count[path] = self.failure_count.get(path, 0) + 1
+                        if count:
+                            self.failure_count[path] = self.failure_count.get(path, 0) + 1
                         break
                     else:
                         subtree = subtree[path_part]
@@ -277,18 +278,22 @@ class JSONSchemaToDatabase:
                     assert prefix_suffix.endswith(suffix)
                     prefix = prefix_suffix[:len(prefix_suffix)-len(suffix)].rstrip('/')
                     res.setdefault(table, {}).setdefault(prefix, {})
-                    self.json_path_count[subtree['_json_path']] += 1
+                    if count:
+                        self.json_path_count[subtree['_json_path']] += 1
 
                 # Leaf node with value, validate and prepare for insertion
                 if '_column' not in subtree:
-                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
+                    if count:
+                        self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
                 col, t = subtree['_column'], subtree['_type']
                 if table not in self._table_columns:
-                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
+                    if count:
+                        self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
                 if not self._is_valid_type(t, value):
-                    self.failure_count[path] = self.failure_count.get(path, 0) + 1
+                    if count:
+                        self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
 
                 res.setdefault(table, {}).setdefault(prefix, {})[col] = value
@@ -299,7 +304,7 @@ class JSONSchemaToDatabase:
                     row_array = [item_id, prefix] + [row_values.get(t) for t in self._table_columns[table]]
                     yield (table, row_array)
 
-    def insert_items(self, con, items, mutate=True):
+    def insert_items(self, con, items, mutate=True, count=False):
         ''' Inserts data into database.
 
         :param con: psycopg2 connection object
@@ -309,6 +314,7 @@ class JSONSchemaToDatabase:
         - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
 
         :param mutate: If this is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
+        :param count: if set to `True`, it will count some things. Defaults to `False`.
 
         Updates `self.failure_count`, a dict counting the number of failures for paths (keys are tuples, values are integers).
 
@@ -318,7 +324,7 @@ class JSONSchemaToDatabase:
 
         Note that the Postgres-based insertion builds up huge intermediary datastructures, so it will take a lot more memory.
         '''
-        rows = self._insert_items_generate_rows(items=items)
+        rows = self._insert_items_generate_rows(items=items, count=count)
 
         if not mutate:
             for table, row in rows:
@@ -328,21 +334,21 @@ class JSONSchemaToDatabase:
         elif self._database_flavor == 'redshift' and self._s3_client:
             with tempfile.TemporaryDirectory() as tmpdirname, con.cursor() as cursor:
                 # Flush the iterator to temporary files on disk
-                temp_files, writers, gzip_objs = {}, {}, []
+                temp_files, writers, file_objs = {}, {}, []
                 for table, row in rows:
                     if table not in temp_files:
-                        fn = temp_files[table] = os.path.join(tmpdirname, table + '.csv.gz')
-                        f = gzip.open(fn, 'wt')
+                        fn = temp_files[table] = os.path.join(tmpdirname, table + '.csv')
+                        f = open(fn, 'wt')
                         writer = csv.writer(f)
                         if self._debug:
-                            print('Creating temp file for table', table, 'at', fn)
+                            print('Creating temp file for table', table, 'at', fn, file=sys.stderr)
                         writers[table] = writer
-                        gzip_objs.append(f)
+                        file_objs.append(f)
 
                     writers[table].writerow(row)
 
                 # Close local temp files so all data gets flushed to disk
-                for f in gzip_objs:
+                for f in file_objs:
                     f.close()
 
                 # Upload all files to S3 and load into Redshift
@@ -351,10 +357,10 @@ class JSONSchemaToDatabase:
                 for table, fn in temp_files.items():
                     s3_path = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
                     if self._debug:
-                        print('Uploading data for table %s from %s (%d bytes) to %s' % (table, fn, os.path.getsize(fn), s3_path))
+                        print('Uploading data for table %s from %s (%d bytes) to %s' % (table, fn, os.path.getsize(fn), s3_path), file=sys.stderr)
                     self._s3_client.upload_file(Filename=fn, Bucket=self._s3_bucket, Key=s3_path)
 
-                    query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns gzip compupdate off statupdate off' % (
+                    query = 'copy %s from \'s3://%s/%s\' csv %s truncatecolumns compupdate off statupdate off' % (
                         self._postgres_table_name(table),
                         self._s3_bucket, s3_path, self._s3_iam_arn and 'iam_role \'%s\'' % self._s3_iam_arn or '')
                     self._execute(cursor, query)
