@@ -1,3 +1,4 @@
+import datetime
 import json
 import psycopg2
 
@@ -91,3 +92,20 @@ def test_comments():
                                           'file': 'this is a file',
                                           'a_bunch_of_documents': 'this is a bunch of documents'}
     assert translator._column_comments == {'file': {'url': 'the url of the file'}}
+
+
+def test_time_types():
+    schema = json.load(open('test/test_time_schema.json'))
+    translator = JSONSchemaToPostgres(schema, debug=True)
+
+    con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    translator.create_tables(con)
+    translator.insert_items(con, [
+        (1, {'ts': datetime.datetime(2018, 2, 3, 12, 45, 56), 'd': datetime.date(2018, 7, 8)}),
+        (2, {'ts': '2017-02-03T01:23:45Z', 'd': '2013-03-02'}),
+    ])
+
+    assert list(query(con, 'select id, d from root')) == \
+        [(1, datetime.date(2018, 7, 8)), (2, datetime.date(2013, 3, 2))]
+    assert list((id, ts.isoformat()) for id, ts in query(con, 'select id, ts from root')) == \
+        [(1, '2018-02-03T12:45:56+00:00'), (2, '2017-02-03T01:23:45+00:00')]

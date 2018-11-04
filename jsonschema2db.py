@@ -1,5 +1,6 @@
 import change_case
 import csv
+import datetime
 import iso8601
 import json
 import os
@@ -185,26 +186,29 @@ class JSONSchemaToDatabase:
 
         return res
 
-    def _is_valid_type(self, t, value):
+    def _coerce_type(self, t, value):
+        ''' Returns a two-tuple (is_valid, new_value) where new_value is properly coerced. '''
         try:
             if t == 'number':
-                assert type(value) != bool
-                float(value)
+                return type(value) != bool, float(value)
             elif t == 'integer':
-                assert type(value) != bool
-                int(value)
+                return type(value) != bool,  int(value)
             elif t == 'boolean':
-                assert type(value) == bool
+                return type(value) == bool, value
             elif t == 'timestamp':
-                iso8601.parse_date(value)
+                if type(value) == datetime.datetime:
+                    return True, value
+                return True, iso8601.parse_date(value)
             elif t == 'date':
-                iso8601.parse_date(value + 'T00:00:00Z')
+                if type(value) == datetime.date:
+                    return True, value
+                return True, datetime.date(*(int(z) for z in value.split('-')))
             elif t == 'string':
                 # Allow coercing ints/floats, but nothing else
-                assert type(value) in [str, int, float]
+                return type(value) in [str, int, float], str(value)
         except:
-            return False
-        return True
+            pass
+        return False, None
 
     def _flatten_dict(self, data, res=None, path=tuple()):
         if res is None:
@@ -291,12 +295,13 @@ class JSONSchemaToDatabase:
                     if count:
                         self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
-                if not self._is_valid_type(t, value):
+                is_valid, new_value = self._coerce_type(t, value)
+                if not is_valid:
                     if count:
                         self.failure_count[path] = self.failure_count.get(path, 0) + 1
                     continue
 
-                res.setdefault(table, {}).setdefault(prefix, {})[col] = value
+                res.setdefault(table, {}).setdefault(prefix, {})[col] = new_value
 
             # Compile table rows for this item
             for table, table_values in res.items():
