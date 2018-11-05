@@ -360,7 +360,7 @@ class JSONSchemaToDatabase:
                 # TODO: might want to use a thread pool for this
                 batch_random = '%012d' % random.randint(0, 999999999999)
                 for table, fn in temp_files.items():
-                    s3_path = '/%s/%s/%s.csv.gz' % (self._s3_prefix, batch_random, table)
+                    s3_path = '/%s/%s/%s.csv' % (self._s3_prefix, batch_random, table)
                     if self._debug:
                         print('Uploading data for table %s from %s (%d bytes) to %s' % (table, fn, os.path.getsize(fn), s3_path), file=sys.stderr)
                     self._s3_client.upload_file(Filename=fn, Bucket=self._s3_bucket, Key=s3_path)
