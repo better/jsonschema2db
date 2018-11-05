@@ -1,0 +1,22 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "definitions": {
+	"date": {
+	    "type": "string",
+	    "format": "string"
+	},
+	"timestamp": {
+	    "type": "string",
+	    "format": "date-time"
+	}
+    },
+    "properties": {
+        "ts": {
+	    "$ref": "#/definitions/timestamp"
+        },
+	"d": {
+	    "$ref": "#/definitions/date"
+        }
+    }
+}
