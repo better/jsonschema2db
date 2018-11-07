@@ -249,7 +249,7 @@ class JSONSchemaToDatabase:
                     self._execute(cursor, 'comment on table %s is %%s' % self._postgres_table_name(table), (self._table_comments[table],))
                 for c in columns:
                     if c in self._column_comments.get(table, {}):
-                        self._execute(cursor, 'comment on column %s.%s is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
+                        self._execute(cursor, 'comment on column %s."%s" is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
     def _insert_items_generate_rows(self, items, count):
         # Helper function to generate data row by row for insertion
