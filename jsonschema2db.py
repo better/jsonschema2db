@@ -192,7 +192,7 @@ class JSONSchemaToDatabase:
             if t == 'number':
                 return type(value) != bool, float(value)
             elif t == 'integer':
-                return type(value) != bool,  int(value)
+                return type(value) != bool, int(value)
             elif t == 'boolean':
                 return type(value) == bool, value
             elif t == 'timestamp':
@@ -206,6 +206,8 @@ class JSONSchemaToDatabase:
             elif t == 'string':
                 # Allow coercing ints/floats, but nothing else
                 return type(value) in [str, int, float], str(value)
+            elif t == 'enum':
+                return type(value) == str, str(value)
         except:
             pass
         return False, None
