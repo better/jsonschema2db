@@ -12,7 +12,7 @@ Postgres and Redshift are supported, although the latter is somewhat experimenta
 Installation
 ---
 
-The easiest way to install this is (probably) to run `pip install -e git://github.com/better/jsonschema2db#egg=jsonschema2db`
+The easiest way to install is `pip install jsonschema2db`
 
 Documentation
 ---

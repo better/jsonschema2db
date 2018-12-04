@@ -8,11 +8,11 @@ Also see the `Github page <https://github.com/better/jsonschema2db>`_ for source
 Installation
 ============
 
-The easiest way to install this is (probably) to run
+The easiest way to install is from PyPI:
 
 ::
 
-    pip install -e git://github.com/better/jsonschema2db#egg=jsonschema2db
+    pip install jsonschema2db
 
 
 Quick overview
