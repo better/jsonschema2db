@@ -109,17 +109,16 @@ class JSONSchemaToDatabase:
         definition = None
         new_json_path = json_path
         while '$ref' in tree:
-            p = tree['$ref'].lstrip('#').lstrip('/').split('/')
-            # TODO: I actually don't think it's required JSON schema that all definitions have to go under #/definitions
-            if len(p) != 2 and p[0] != 'definitions':
-                warnings.warn('%s.%s: Broken reference: %s' % (table, self._column_name(path), tree['$ref']))
-                return
-            _, definition = p
-            if definition not in schema['definitions']:
-                warnings.warn('%s.%s: Broken definition: %s' % (table, self._column_name(path), definition))
-                return
-            tree = schema['definitions'][definition]
-            new_json_path = ('#', 'definitions', definition)
+            ref = tree['$ref']
+            p = ref.lstrip('#').lstrip('/').split('/')
+            tree = schema
+            for elem in p:
+                if elem not in tree:
+                    warnings.warn('%s.%s: Broken definition: %s' % (table, self._column_name(path), ref))
+                    return
+                tree = tree[elem]
+            new_json_path = ('#',) + tuple(p)
+            definition = p[-1]  # TODO(erikbern): we should just make this a boolean variable
 
         special_keys = set(tree.keys()).intersection(['oneOf', 'allOf', 'anyOf'])
         if special_keys:
@@ -137,6 +136,7 @@ class JSONSchemaToDatabase:
             res = {}
             warnings.warn('%s.%s: Type info missing' % (table, self._column_name(path)))
         elif tree['type'] == 'object':
+            print('object:', tree)
             res = {}
             if 'patternProperties' in tree:
                 # Always create a new table for the pattern properties

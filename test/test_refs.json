@@ -1,0 +1,28 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "a": {
+        "b": {
+            "c": {
+                "type": "object",
+                "properties": {
+                    "col": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    },
+    "x": {
+        "y": {
+            "z": {
+                "$ref": "#/a/b/c"
+            }
+        }
+    },
+    "properties": {
+        "banana": {
+	    "$ref": "#/x/y/z"
+        }
+    }
+}
