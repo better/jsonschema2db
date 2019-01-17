@@ -109,3 +109,12 @@ def test_time_types():
         [(1, datetime.date(2018, 7, 8)), (2, datetime.date(2013, 3, 2))]
     assert list((id, ts.isoformat()) for id, ts in query(con, 'select id, ts from root')) == \
         [(1, '2018-02-03T12:45:56+00:00'), (2, '2017-02-03T01:23:45+00:00')]
+
+
+def test_refs():
+    schema = json.load(open('test/test_refs.json'))
+    translator = JSONSchemaToPostgres(schema, debug=True)
+
+    con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    translator.create_tables(con)
+    assert list(query(con, 'select col from c')) == []  # Just make sure table exists
