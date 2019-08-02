@@ -15,7 +15,6 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.pardir))
-import jsonschema2db  # NOQA: make sure it works
 
 
 # -- Project information -----------------------------------------------------
@@ -118,6 +117,8 @@ html_sidebars = {
     ]
 }
 
+# Make it possible to build doc without dependencies
+autodoc_mock_imports = ['change_case', 'iso8601', 'psycopg2']
 
 # -- Extension configuration -------------------------------------------------
 
