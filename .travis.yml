@@ -10,9 +10,9 @@ services:
 
 before_install:
   - docker build -t jsonschema2db .
-  # Make sure Sphinx works
-  - pip install . sphinx
-  - sphinx-build -M html docs/ docs/_build/
+  # Make sure Sphinx works and we can build documentation
+  - pip install sphinx
+  - python setup.py build_sphinx
 
 script:
   - docker run jsonschema2db

@@ -136,7 +136,6 @@ class JSONSchemaToDatabase:
             res = {}
             warnings.warn('%s.%s: Type info missing' % (table, self._column_name(path)))
         elif tree['type'] == 'object':
-            print('object:', tree)
             res = {}
             if 'patternProperties' in tree:
                 # Always create a new table for the pattern properties

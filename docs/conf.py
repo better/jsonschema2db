@@ -119,6 +119,9 @@ html_sidebars = {
 }
 
 
+# Mock imports so we can build docs without dependencies
+autodoc_mock_imports = ['change_case', 'iso8601', 'psycopg2']
+
 # -- Extension configuration -------------------------------------------------
 
 # -- Options for todo extension ----------------------------------------------
