@@ -118,6 +118,8 @@ html_sidebars = {
     ]
 }
 
+# Make it possible to build doc without dependencies
+autodoc_mock_imports = ['change_case', 'iso8601', 'psycopg2']
 
 # -- Extension configuration -------------------------------------------------
 
