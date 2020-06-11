@@ -21,6 +21,7 @@ class JSONSchemaToDatabase:
     :param item_col_type: (optional) Type of the main object key (uses the type identifiers from JSON Schema). Default is 'integer'
     :param prefix_col_name: (optional) Postgres column name identifying the subpaths in the object (default is 'prefix')
     :param abbreviations: (optional) A string to string mapping containing replacements applied to each part of the path
+    :param root_table: (optional) Name of the root table
     :param s3_client: (optional, Redshift only) A boto3 client object used for copying data through S3 (if not provided then it will use INSERT statements, which can be very slow)
     :param s3_bucket: (optional, Redshift only) Required with s3_client
     :param s3_prefix: (optional, Redshift only) Optional subdirectory within the S3 bucket
@@ -30,7 +31,7 @@ class JSONSchemaToDatabase:
     '''
     def __init__(self, schema, database_flavor, postgres_schema=None, debug=False,
                  item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix',
-                 abbreviations={},
+                 abbreviations={}, root_table='root',
                  s3_client=None, s3_bucket=None, s3_prefix='jsonschema2db', s3_iam_arn=None):
         self._database_flavor = database_flavor
         self._debug = debug
@@ -44,6 +45,7 @@ class JSONSchemaToDatabase:
         self._abbreviations = abbreviations
         self._table_comments = {}
         self._column_comments = {}
+        self._root_table = root_table
 
         # Redshift-specific properties
         self._s3_client = s3_client
@@ -56,7 +58,7 @@ class JSONSchemaToDatabase:
         self.json_path_count = {}  # json path -> count
 
         # Walk the schema and build up the translation tables
-        self._translation_tree = self._traverse(schema, schema, comment=schema.get('comment'))
+        self._translation_tree = self._traverse(schema, schema, table=self._root_table, comment=schema.get('comment'))
 
         # Need to compile all the backlinks that uniquely identify a parent and add columns for them
         for child_table in self._backlinks:
