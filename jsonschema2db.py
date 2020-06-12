@@ -21,6 +21,7 @@ class JSONSchemaToDatabase:
     :param item_col_type: (optional) Type of the main object key (uses the type identifiers from JSON Schema). Default is 'integer'
     :param prefix_col_name: (optional) Postgres column name identifying the subpaths in the object (default is 'prefix')
     :param abbreviations: (optional) A string to string mapping containing replacements applied to each part of the path
+    :param extra_columns: (optional) A list of pairs representing extra columns in the root table. The format is ('column_name', 'type')
     :param root_table: (optional) Name of the root table
     :param s3_client: (optional, Redshift only) A boto3 client object used for copying data through S3 (if not provided then it will use INSERT statements, which can be very slow)
     :param s3_bucket: (optional, Redshift only) Required with s3_client
@@ -31,7 +32,7 @@ class JSONSchemaToDatabase:
     '''
     def __init__(self, schema, database_flavor, postgres_schema=None, debug=False,
                  item_col_name='item_id', item_col_type='integer', prefix_col_name='prefix',
-                 abbreviations={}, root_table='root',
+                 abbreviations={}, extra_columns=[], root_table='root',
                  s3_client=None, s3_bucket=None, s3_prefix='jsonschema2db', s3_iam_arn=None):
         self._database_flavor = database_flavor
         self._debug = debug
@@ -43,6 +44,7 @@ class JSONSchemaToDatabase:
         self._item_col_type = item_col_type
         self._prefix_col_name = prefix_col_name
         self._abbreviations = abbreviations
+        self._extra_columns = extra_columns
         self._table_comments = {}
         self._column_comments = {}
         self._root_table = root_table
@@ -73,6 +75,11 @@ class JSONSchemaToDatabase:
         # Construct tables and columns
         self._table_columns = {}
         max_column_length = {'postgres': 63, 'redshift': 127}[self._database_flavor]
+
+        for col, type in self._extra_columns:
+            if 0 < len(col) <= max_column_length:
+                self._table_definitions[self._root_table][col] = type
+
         for table, column_types in self._table_definitions.items():
             for column in column_types.keys():
                 if len(column) > max_column_length:
@@ -255,7 +262,7 @@ class JSONSchemaToDatabase:
                     if c in self._column_comments.get(table, {}):
                         self._execute(cursor, 'comment on column %s."%s" is %%s' % (self._postgres_table_name(table), c), (self._column_comments[table][c],))
 
-    def _insert_items_generate_rows(self, items, count):
+    def _insert_items_generate_rows(self, items, extra_items, count):
         # Helper function to generate data row by row for insertion
         for item_id, data in items:
             if type(data) == dict:
@@ -307,13 +314,17 @@ class JSONSchemaToDatabase:
 
                 res.setdefault(table, {}).setdefault(prefix, {})[col] = new_value
 
+            for table, table_values in res.items():
+                if table == self._root_table and item_id in extra_items:
+                    res[table][''].update(extra_items[item_id])
+
             # Compile table rows for this item
             for table, table_values in res.items():
                 for prefix, row_values in table_values.items():
                     row_array = [item_id, prefix] + [row_values.get(t) for t in self._table_columns[table]]
                     yield (table, row_array)
 
-    def insert_items(self, con, items, mutate=True, count=False):
+    def insert_items(self, con, items, extra_items={}, mutate=True, count=False):
         ''' Inserts data into database.
 
         :param con: psycopg2 connection object
@@ -322,6 +333,7 @@ class JSONSchemaToDatabase:
         - A nested dict conforming to the JSON spec
         - A list (or iterator) of pairs where the first item in the pair is a tuple specifying the path, and the second value in the pair is the value.
 
+        :param extra_items: A dictionary containing values for extra columns, where key is an extra column name.
         :param mutate: If this is set to `False`, nothing is actually inserted. This might be useful if you just want to validate data.
         :param count: if set to `True`, it will count some things. Defaults to `False`.
 
@@ -333,7 +345,7 @@ class JSONSchemaToDatabase:
 
         Note that the Postgres-based insertion builds up huge intermediary datastructures, so it will take a lot more memory.
         '''
-        rows = self._insert_items_generate_rows(items=items, count=count)
+        rows = self._insert_items_generate_rows(items=items, extra_items=extra_items, count=count)
 
         if not mutate:
             for table, row in rows:
