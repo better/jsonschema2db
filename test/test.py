@@ -118,3 +118,33 @@ def test_refs():
     con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
     translator.create_tables(con)
     assert list(query(con, 'select col from c')) == []  # Just make sure table exists
+
+
+def test_extra_columns():
+    schema = json.load(open('test/test_schema.json'))
+    translator = JSONSchemaToPostgres(
+        schema,
+        postgres_schema='schm',
+        item_col_name='loan_file_id',
+        item_col_type='string',
+        abbreviations={
+            'AbbreviateThisReallyLongColumn': 'AbbTRLC',
+        },
+        debug=True,
+        extra_columns=[('loan_period', 'integer')]
+    )
+
+    con = psycopg2.connect('host=localhost dbname=jsonschema2db-test')
+    translator.create_tables(con)
+    translator.insert_items(con, [
+        ('loan_file_abc123', {
+            'Loan': {'Amount': 500000},
+            'SubjectProperty': {'Address': {'City': 'New York', 'ZipCode': '12345', 'Latitude': 43}, 'Acreage': 42},
+            'RealEstateOwned': {'1': {'Address': {'City': 'Brooklyn', 'ZipCode': '65432'}, 'RentalIncome': 1000},
+                                '2': {'Address': {'City': 'Queens', 'ZipCode': '54321'}}},
+        })
+    ], {'loan_file_abc123': {'loan_period': 30}})
+    translator.create_links(con)
+    translator.analyze(con)
+
+    assert list(query(con, 'select loan_period from schm.root')) == [(30,)]
