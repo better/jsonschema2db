@@ -86,7 +86,7 @@ The first step is to instantiate a :class:`jsonschema2db.JSONSchemaToPostgres` o
     schema = json.load(open('test/test_schema.json'))
     translator = JSONSchemaToPostgres(
         schema,
-        postgres_schema='schm',
+        schema_namespace='schm',
         item_col_name='loan_file_id',
         item_col_type='string',
         abbreviations={
