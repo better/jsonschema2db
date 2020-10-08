@@ -2,6 +2,9 @@ language: python
 python: "3.7"
 dist: xenial
 
+services:
+  - docker
+
 stages:
   - lint
   - test
@@ -26,14 +29,16 @@ jobs:
         - pip install poetry
         - poetry install -v
       script:
-        - echo "Tests OK!"
+        - make test
     - stage: deploy
       script:
         - echo Deploying to PyPI...
 
 deploy:
   - provider: script
-    script: poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
+    script: |
+      poetry version $(git describe --tags --abbrev=0)
+      poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
     on:
       repo: clarityai-eng/jsonchema2ddl
       branch: master
