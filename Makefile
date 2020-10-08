@@ -11,6 +11,12 @@ all: setup lint test docs  ## Execute all the build steps
 .PHONY: setup
 setup:  ## Setup dev environment
 	poetry install
+	poetry run vscode
+
+.PHONY: install
+install:  ## Install dev environment
+	poetry install
+
 
 .PHONY: lint
 lint:  ## Perform linting and formatting
