@@ -1,6 +1,6 @@
-[![Travis status](https://img.shields.io/travis/better/jsonschema2db/master.svg?style=flat)](https://travis-ci.org/better/jsonschema2db)
+[![Travis status](https://img.shields.io/travis/better/jsonschema2db/master.svg?style=flat)](https://travis-ci.org/clarityai-eng/jsonschema2ddl)
 
-JSON Schema ➣ Database
+JSON Schema ➣ DDL
 ---
 
 We use [JSON Schema](http://json-schema.org/) pretty extensively at [Better](https://better.com) to store complex data. Unfortunately the data is hard to query from SQL. To facilitate querying, this library converts objects stored in a JSON schema into flat Postgres tables with proper types.
