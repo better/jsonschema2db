@@ -9,8 +9,7 @@ services:
 stages:
   - lint
   - test
-  - name: deploy
-    # if: tag IS present
+  - deploy
 
 cache:
   pip: true
@@ -33,7 +32,7 @@ jobs:
         - make test
     - stage: deploy
       script:
-        - echo Deploying to PyPI...
+        - echo "Deploying to PyPI..."
 
 deploy:
   - provider: script
