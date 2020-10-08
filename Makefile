@@ -22,7 +22,7 @@ lint:  ## Perform linting and formatting
 
 .PHONY: test
 test:  ## Run tests
-	poetry run pytest --cov=jsonschema2ddl -v tests/
+	poetry run pytest --cov=jsonschema2ddl -v test/
 
 .PHONY: docs
 docs:   ## Produce documentation
