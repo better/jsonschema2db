@@ -1,6 +1,6 @@
-[![Travis status](https://img.shields.io/travis/clarityai-eng/jsonschema2ddl/master.svg?style=flat)](https://travis-ci.org/clarityai-eng/jsonschema2ddl)
-
 # JSON Schema ➣ DDL
+
+[![Travis status](https://img.shields.io/travis/clarityai-eng/jsonschema2ddl/master.svg?style=flat)](https://travis-ci.org/clarityai-eng/jsonschema2ddl)
 
 > This repository is a fork. Check out the original project [here](https://github.com/better/jsonschema2ddl)
 
