@@ -1,18 +1,46 @@
-sudo: required
-
 language: python
-
-python:
-  - "3.6"
+python: "3.7"
+dist: xenial
 
 services:
   - docker
 
-before_install:
-  - docker build -t jsonschema2db .
-  # Make sure Sphinx works
-  - pip install sphinx
-  - sphinx-build -M html docs/ docs/_build/ -W
+stages:
+  - lint
+  - test
+  - name: deploy
+    if: tag IS present
 
-script:
-  - docker run jsonschema2db
+cache:
+  pip: true
+  directories:
+    - "$HOME/.cache/pre-commit"
+
+install:
+  - pip install --upgrade pip
+  - pip install poetry
+  - poetry install -v
+
+jobs:
+  include:
+    - stage: test
+      install:
+        - pip install --upgrade pip
+        - pip install poetry
+        - poetry install -v
+      script:
+        - make test
+    - stage: deploy
+      script:
+        - echo Deploying to PyPI...
+
+deploy:
+  - provider: script
+    script: |
+      poetry version $(git describe --tags --abbrev=0)
+      poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
+    on:
+      repo: clarityai-eng/jsonchema2ddl
+      branch: master
+      python: '3.7'
+      tags: true
