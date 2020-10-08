@@ -9,25 +9,25 @@ help:  ## Show this help
 all: setup lint test docs  ## Execute all the build steps
 
 .PHONY: setup
-setup:  ## Setup dev environment with pipenv
-	pipenv install --dev --skip-lock
+setup:  ## Setup dev environment
+	poetry install
 
 .PHONY: lint
 lint:  ## Perform linting and formatting
 	@echo "Formatting with autopep8"
-	@PIPENV_VERBOSITY=-1 pipenv run autopep8 -i -r ./
+	@poetry run autopep8 -i -r ./
 	@echo "Check for errors with flake8"
-	@PIPENV_VERBOSITY=-1 pipenv run flake8 ./
+	@poetry run flake8 ./
 	@echo "Done"
 
 .PHONY: test
 test:  ## Run tests
-	PYTHONPATH=src PIPENV_VERBOSITY=-1 pipenv run pytest --cov=jsonschema2ddl -v tests/
+	poetry run pytest --cov=jsonschema2ddl -v tests/
 
 .PHONY: docs
 docs:   ## Produce documentation
-	@PIPENV_VERBOSITY=-1 pipenv run $(MAKE) -s -C docs clean
-	@PIPENV_VERBOSITY=-1 pipenv run $(MAKE) -s -C docs html
+	@poetry run $(MAKE) -s -C docs clean
+	@poetry run $(MAKE) -s -C docs html
 
 .PHONY: clean
 clean:  ## Remove build artifacts
