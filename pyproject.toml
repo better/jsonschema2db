@@ -1,14 +1,18 @@
 [tool.poetry]
-name = "test"
+name = "jsonschema2ddl"
 version = "0.0.0"
-description = ""
+description = "Convert jsonschema to SQL tables"
 authors = ["Pablo San José <pablo.sanjose@clarity.ai>"]
+
+[tool.poetry.scripts]
+vscode = "scripts.setup:vscode"
 
 [tool.poetry.dependencies]
 python = "^3.7"
 change_case = "^0.5.2"
 iso8601 = "^0.1.12"
 psycopg2 = "^2.7.2"
+
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
