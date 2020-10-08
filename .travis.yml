@@ -41,4 +41,4 @@ deploy:
       repo: clarityai-eng/jsonschema2ddl
       branch: master
       python: '3.7'
-      # tags: true
+      tags: true
