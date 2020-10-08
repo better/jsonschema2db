@@ -1,18 +1,14 @@
 sudo: required
-
 language: python
-
 python:
-  - "3.6"
-
+- '3.6'
 services:
-  - docker
-
+- docker
 before_install:
-  - docker build -t jsonschema2db .
-  # Make sure Sphinx works
-  - pip install sphinx
-  - sphinx-build -M html docs/ docs/_build/ -W
-
+- make docs
 script:
-  - docker run jsonschema2db
+- echo "OK"
+env:
+  global:
+  - secure: QkkWLGTJgspMI382CEnIoPVgMnzTYDrgnbA+y+zgysPWEqi08YyvwvJJXfFds9rrvVlFo3CklCmGseVm07N3hRaprHtMoQ7Cn4BNAFev9Kd8AoLXTaZbQh2Ku6/8BJdX+43Vmp+nM0sQuCzvSvSjjftbxcN2fTKME13SySQ9f3qe2ZVBgmTwFz6E38YSbRYMXNdpjvez2S/DNctcrjmRQTNqVv1W5M97mbsdDVfxob0vqybcRXksKHMflp/y8tLIz97+hWeIC6r4haybzx7jHxrf0Gaxex6p9A+mlnM02Cw1gSkgn/ePNQYyDc6izMd3oDczRbMjRzNKE2zN+/CDgPPrgnt/9N8/sBDxCpXs46I6fO6vUYLs1BdhZQS6SFly9fmAo+P+MFYDONcSW5Xj67zXLhP8TntBgAtC7EhCAfR8xB+mdvI0/FBIQwtcFDfJjYm/KScFLEF9BWLBEZ3/qaAw3EpBAdmCcEWbRP9kPvowPFcdjnOhFliohPqrZCRs/e3SYETsxjOeIZtpeKALfygs8h1KVqEMvDyQ5wtT9OW+hqHedoAOmN2NnPaJeWfUZkG7opfi0AHAP/HbyFx3rN9ON6j2Uh4Opa1IcNqvKnWO0X5WW1x4caGxfGCasYxtOam4BGDdlmKueeBJX8tXkWff0ICgwIcanwqmFPwbY9g=
+  - secure: AsiDRErBri8pjwKfJ9QZrk1UnIYsqaxdQg7IsYLsJHTdSsuoAqhjbzfdrSmYwkt7+/Obm6ZcfOU8hiJfHrNRnDLHx2MWIMVF5yo/60ct6VEK72QkPt48i2iEpavY0p12af/dTgNGSh3HzLE+m5FkIikxtz8Pn2p5OW+nAJssbh4+EtyhMuX8c7aTJU3zHq+uP2FI8MYPcDPSDKCS7UqcU63BHohkuyJqIddaX7Ogk4Q6Zyjo0XSIblISmLtZskfSH5dbZi6vRXo4nD3tFfZ++EDM9b2rj0698WbWKzQlt6AWsaESQroWT+2Y9tsx51QqtZO6HgeBhXMv13o2Z7ImfL+0O09StWGWzrrJiUf0KEy3YUEZSu2zqrs6hRVL3qvpFYhG9GLGh7q4uJGfyBuW1mSBL/6l2eUy2sc8xw98c9O2SOq3doxmOat9xdHN2v9UtNXMeoj0jq5OlFX96a6SppvlFFjR3AKUWNVCzFj54NObDiRC6ZdNRh15/A3x3W5u/2hL6sexEMnAwPJ4xjIAM3mihPLRPUmZAj6BO5RE9ttHDsjRUFqUs1Mzy3zb3R3lG4b2QCu3cUXAqI5GmgEcALdU1KZ+lJjCMqZ52mpOdl2jho0fbYpgmasKEbjfOaeDeoc2Ibp0+pTA5beJPIs9pGlfMOklSM+YUfP5olhIusQ=
