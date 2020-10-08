@@ -1,5 +1,6 @@
 language: python
 python: "3.7"
+os: linux
 dist: xenial
 
 services:
@@ -36,9 +37,7 @@ jobs:
 
 deploy:
   - provider: script
-    script: |
-      poetry version $(git describe --tags --abbrev=0)
-      poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
+    script: poetry version $(git describe --tags --abbrev=0) && poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
     on:
       repo: clarityai-eng/jsonschema2ddl
       branch: master
