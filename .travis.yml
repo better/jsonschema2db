@@ -40,7 +40,7 @@ deploy:
       poetry version $(git describe --tags --abbrev=0)
       poetry publish --username $PYPI_PASS --password $PYPI_PASS --build
     on:
-      repo: clarityai-eng/jsonchema2ddl
+      repo: clarityai-eng/jsonschema2ddl
       branch: master
       python: '3.7'
       tags: true
