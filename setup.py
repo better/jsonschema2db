@@ -10,7 +10,7 @@ or
 '''
 
 setup(name='JSONSchema2DB',
-      version='1.0.1',
+      version='1.1.0',
       description='Generate database tables from JSON schema',
       long_description=long_description,
       url='https://better.engineering/jsonschema2db',
